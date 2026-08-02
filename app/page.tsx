@@ -5,9 +5,10 @@ import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryList, { GroceryCategory } from './Components/GroceryList';
 
 export default function Home() {
-  const [clientName, setClientName] = useState('Brian');
-  const [dailyCalories, setDailyCalories] = useState(2450);
-  const [proteinTarget, setProteinTarget] = useState(160);
+  // CLIENT PROFILE INPUTS - START BLANK BY DEFAULT
+  const [clientName, setClientName] = useState('');
+  const [dailyCalories, setDailyCalories] = useState<number | ''>('');
+  const [proteinTarget, setProteinTarget] = useState<number | ''>('');
   const [householdSize, setHouseholdSize] = useState(1);
   const [budget, setBudget] = useState('moderate');
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
@@ -20,14 +21,15 @@ export default function Home() {
   const [exclusions, setExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
+  // WEEKLY MATRIX INITIALIZED: LUNCH AND DINNER DEFAULT FOR MON-FRI ONLY
   const [schedule, setSchedule] = useState<{ [day: string]: string[] }>({
-    MON: ['Breakfast', 'Lunch', 'Dinner'],
-    TUE: ['Breakfast', 'Lunch', 'Dinner'],
-    WED: ['Breakfast', 'Dinner'],
-    THU: ['Breakfast', 'Lunch', 'Dinner'],
-    FRI: ['Breakfast', 'Lunch', 'Dinner'],
-    SAT: ['Breakfast', 'Lunch', 'Snacks'],
-    SUN: ['Breakfast', 'Dinner'],
+    MON: ['Lunch', 'Dinner'],
+    TUE: ['Lunch', 'Dinner'],
+    WED: ['Lunch', 'Dinner'],
+    THU: ['Lunch', 'Dinner'],
+    FRI: ['Lunch', 'Dinner'],
+    SAT: [],
+    SUN: [],
   });
 
   const [loading, setLoading] = useState(false);
@@ -120,7 +122,7 @@ export default function Home() {
       }, 100);
     } catch (err: any) {
       alert(`Error: ${err.message}`);
-    } finally {
+    } fontally {
       setLoading(false);
     }
   };
@@ -161,9 +163,10 @@ export default function Home() {
               </label>
               <input
                 type="text"
+                placeholder="e.g. John Doe"
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00F2FE]"
+                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
               />
             </div>
 
@@ -173,9 +176,10 @@ export default function Home() {
               </label>
               <input
                 type="number"
+                placeholder="e.g. 2450"
                 value={dailyCalories}
-                onChange={(e) => setDailyCalories(Number(e.target.value))}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00F2FE]"
+                onChange={(e) => setDailyCalories(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
               />
             </div>
 
@@ -185,9 +189,10 @@ export default function Home() {
               </label>
               <input
                 type="number"
+                placeholder="e.g. 160"
                 value={proteinTarget}
-                onChange={(e) => setProteinTarget(Number(e.target.value))}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00F2FE]"
+                onChange={(e) => setProteinTarget(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
               />
             </div>
           </div>
