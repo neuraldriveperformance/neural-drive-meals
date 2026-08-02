@@ -122,7 +122,7 @@ export default function Home() {
       }, 100);
     } catch (err: any) {
       alert(`Error: ${err.message}`);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
