@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ==========================================
+   PRINT STYLES (Single Recipe Export)
+   ========================================== */
+@media print {
+  /* Hide page header, form inputs, disclaimers, action buttons, and non-printed elements */
+  header,
+  form,
+  .no-print,
+  #grocery-list-container {
+    display: none !important;
+  }
+
+  /* Force clean white page background and crisp dark text for printouts */
+  body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Remove default web shadows and extra margins on printed cards */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
