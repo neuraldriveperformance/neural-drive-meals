@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryList, { GroceryCategory } from './Components/GroceryList';
 
@@ -36,6 +36,21 @@ export default function Home() {
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
   const [groceries, setGroceries] = useState<GroceryCategory[] | null>(null);
   const [estimatedCost, setEstimatedCost] = useState<string>('');
+
+  // RECIPE HISTORY TRACKING TO ENSURE UNIQUE MEALS ACROSS EXTENDED GENERATIONS
+  const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Load historical recipe names from localStorage on initial mount
+    try {
+      const storedHistory = localStorage.getItem('ndp_recipe_history');
+      if (storedHistory) {
+        setRecipeHistory(JSON.parse(storedHistory));
+      }
+    } catch (e) {
+      console.warn('Unable to load recipe history from localStorage:', e);
+    }
+  }, []);
 
   const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
   const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
@@ -84,6 +99,7 @@ export default function Home() {
           varietyLevel: variety,
           enableBulkPrep: bulkPrep,
           maxPrepTime,
+          recipeHistory, // Sending past recipe names to avoid re-generating them
         }),
       });
 
@@ -93,8 +109,32 @@ export default function Home() {
         throw new Error(data.error || 'Failed to generate meal plan');
       }
 
-      setWeeklyCalendar(data.weeklyCalendar || []);
+      const generatedCalendar = data.weeklyCalendar || [];
+      setWeeklyCalendar(generatedCalendar);
       setEstimatedCost(data.estimatedGroceryCost || `$75 – $115 USD`);
+
+      // Extract new recipe names from the generated calendar and update local history
+      const newRecipeNames: string[] = [];
+      generatedCalendar.forEach((dayObj: any) => {
+        if (Array.isArray(dayObj.meals)) {
+          dayObj.meals.forEach((meal: any) => {
+            if (meal && meal.name) {
+              newRecipeNames.push(meal.name);
+            }
+          });
+        }
+      });
+
+      if (newRecipeNames.length > 0) {
+        // Retain up to the last 60 recipes across generations
+        const updatedHistory = Array.from(new Set([...recipeHistory, ...newRecipeNames])).slice(-60);
+        setRecipeHistory(updatedHistory);
+        try {
+          localStorage.setItem('ndp_recipe_history', JSON.stringify(updatedHistory));
+        } catch (e) {
+          console.warn('Unable to persist recipe history to localStorage:', e);
+        }
+      }
 
       if (data.groceries && Array.isArray(data.groceries)) {
         const categoryMap: { [cat: string]: { item: string; amount: string }[] } = {};

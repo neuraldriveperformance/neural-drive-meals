@@ -22,6 +22,10 @@ export async function POST(req: Request) {
     const varietyLevel = Number(body.varietyLevel) || 3;
     const enableBulkPrep = body.enableBulkPrep ?? false;
     const weeklySchedule = body.weeklySchedule || {};
+    
+    // Read recent recipe history (up to 60 recipes) sent from client
+    const rawHistory: string[] = body.recipeHistory || [];
+    const recipeHistory = rawHistory.slice(-60);
 
     // 1. DYNAMIC HIGH-ENTROPY RANDOM SEED
     const timestampSeed = Date.now().toString(36);
@@ -56,11 +60,17 @@ export async function POST(req: Request) {
       varietyInstruction = `VARIETY LEVEL 1/5 (MINIMUM VARIETY / MONOTONOUS): EAT THE EXACT SAME MEALS EVERY DAY. Generate 1 standard Lunch recipe and 1 standard Dinner recipe, and repeat those identical meals across every single scheduled day in the calendar.`;
     }
 
+    const historyPrompt = recipeHistory.length > 0 
+      ? `RECIPE HISTORY TO AVOID: Do not use any of the following ${recipeHistory.length} recipe names as they were recently generated in past sessions: ${JSON.stringify(recipeHistory)}.`
+      : '';
+
     const systemPrompt = `You are an elite sports nutritionist for Neural Drive Performance.
 Generate a dynamic, structured JSON meal plan strictly adhering to the requirements below.
 
 DYNAMIC UNIQUE SEED: [${timestampSeed}-${randomSeed}]
 CRITICAL INSTRUCTION: Generate a FRESH, CREATIVE meal plan different from any previous generation.
+
+${historyPrompt}
 
 CRITICAL MACROS RULE:
 Each meal object MUST contain ALL FOUR explicit numerical macro fields:
@@ -95,7 +105,7 @@ ${JSON.stringify(weeklySchedule)}`;
             model: 'gpt-4o',
             messages: [{ role: 'system', content: systemPrompt }],
             response_format: { type: 'json_object' },
-            temperature: 0.95, // High creativity & variety
+            temperature: 0.95,
           }),
         });
 
@@ -109,28 +119,92 @@ ${JSON.stringify(weeklySchedule)}`;
       }
     }
 
-    // LOCAL DYNAMIC FALLBACK GENERATOR
+    // EXPANDED LOCAL DYNAMIC FALLBACK GENERATOR WITH HISTORY & VARIETY MATH
     const daysToRender = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    const sampleMeals: { [key: string]: any[] } = {
+    
+    const mealPools: { [key: string]: any[] } = {
+      Breakfast: [
+        { name: 'Egg White & Spinach Omelet w/ Oats', calories: Math.round(calories * 0.25), protein: Math.round(protein * 0.25), carbs: 45, fat: 10, prepTime: '15 mins', ingredients: ['6 egg whites', '1 cup spinach', '1/2 cup rolled oats'], instructions: ['Cook omelet', 'Serve with oats'] },
+        { name: 'Greek Yogurt & Berry Protein Bowl', calories: Math.round(calories * 0.25), protein: Math.round(protein * 0.28), carbs: 40, fat: 6, prepTime: '5 mins', ingredients: ['1.5 cups Greek yogurt', '1 scoop whey', 'blueberries'], instructions: ['Mix yogurt & whey', 'Top with berries'] },
+        { name: 'Smoked Salmon & Avocado Toast', calories: Math.round(calories * 0.26), protein: Math.round(protein * 0.24), carbs: 35, fat: 16, prepTime: '10 mins', ingredients: ['2 slices sourdough', '4 oz salmon', '1/2 avocado'], instructions: ['Toast bread', 'Top with avocado and salmon'] },
+        { name: 'Protein Pancakes w/ Syrup', calories: Math.round(calories * 0.28), protein: Math.round(protein * 0.25), carbs: 55, fat: 8, prepTime: '15 mins', ingredients: ['1 cup pancake mix', '1 egg'], instructions: ['Cook on griddle'] },
+        { name: 'Turkey Sausage & Egg Scramble', calories: Math.round(calories * 0.25), protein: Math.round(protein * 0.26), carbs: 20, fat: 14, prepTime: '12 mins', ingredients: ['3 eggs', '2 sausage patties'], instructions: ['Scramble together'] },
+        { name: 'Chia & Whey Overnight Oats', calories: Math.round(calories * 0.24), protein: Math.round(protein * 0.24), carbs: 50, fat: 10, prepTime: '5 mins', ingredients: ['1/2 cup oats', '1 scoop whey'], instructions: ['Chill overnight'] },
+        { name: 'Steak & Egg Breakfast Wrap', calories: Math.round(calories * 0.30), protein: Math.round(protein * 0.30), carbs: 35, fat: 18, prepTime: '15 mins', ingredients: ['1 tortilla', '3 oz steak', '2 eggs'], instructions: ['Sear steak', 'Scramble eggs & wrap'] },
+      ],
       Lunch: [
         { name: 'Lean Beef & Jasmine Rice Bowl', calories: Math.round(calories * 0.35), protein: Math.round(protein * 0.35), carbs: 70, fat: 18, prepTime: '20 mins', ingredients: ['1.5 cups jasmine rice', '170g 93/7 ground beef', 'zucchini'], instructions: ['Brown beef', 'Serve over rice'] },
         { name: 'Mediterranean Chicken & Quinoa Plate', calories: Math.round(calories * 0.35), protein: Math.round(protein * 0.38), carbs: 60, fat: 15, prepTime: '25 mins', ingredients: ['6 oz chicken breast', '1 cup quinoa', 'cucumber', 'tzatziki'], instructions: ['Grill chicken', 'Serve over quinoa'] },
         { name: 'Turkey & Sweet Potato Skillet', calories: Math.round(calories * 0.35), protein: Math.round(protein * 0.35), carbs: 65, fat: 12, prepTime: '20 mins', ingredients: ['170g ground turkey', '1 sweet potato', 'bell peppers'], instructions: ['Sauté turkey and cubed potato', 'Season and serve'] },
+        { name: 'Chipotle Steak & Black Bean Bowl', calories: Math.round(calories * 0.36), protein: Math.round(protein * 0.36), carbs: 55, fat: 16, prepTime: '20 mins', ingredients: ['6 oz flank steak', '1/2 cup black beans', '1 cup rice'], instructions: ['Sear steak', 'Assemble bowl'] },
+        { name: 'Sesame Ahi Tuna & Jasmine Rice', calories: Math.round(calories * 0.34), protein: Math.round(protein * 0.35), carbs: 58, fat: 10, prepTime: '15 mins', ingredients: ['6 oz Ahi tuna', '1 cup jasmine rice'], instructions: ['Sear tuna 1 min per side'] },
+        { name: 'Grilled Bison Burger & Baked Fries', calories: Math.round(calories * 0.37), protein: Math.round(protein * 0.37), carbs: 50, fat: 18, prepTime: '25 mins', ingredients: ['6 oz bison patty', 'potato wedges'], instructions: ['Grill burger', 'Bake fries'] },
+        { name: 'Thai Peanut Chicken Wrap', calories: Math.round(calories * 0.35), protein: Math.round(protein * 0.36), carbs: 45, fat: 16, prepTime: '15 mins', ingredients: ['6 oz shredded chicken', 'tortilla', 'peanut sauce'], instructions: ['Wrap and serve'] },
       ],
       Dinner: [
         { name: 'Grilled Salmon & Roasted Asparagus', calories: Math.round(calories * 0.32), protein: Math.round(protein * 0.3), carbs: 55, fat: 20, prepTime: '25 mins', ingredients: ['200g salmon fillet', 'asparagus', '1 tbsp olive oil'], instructions: ['Pan sear salmon', 'Roast asparagus'] },
         { name: 'Flank Steak Fajita Bowl', calories: Math.round(calories * 0.33), protein: Math.round(protein * 0.35), carbs: 50, fat: 18, prepTime: '20 mins', ingredients: ['6 oz flank steak', 'bell peppers', '1 cup brown rice'], instructions: ['Sear steak', 'Sauté peppers and onions'] },
         { name: 'Baked Cod & Wild Rice', calories: Math.round(calories * 0.32), protein: Math.round(protein * 0.32), carbs: 55, fat: 10, prepTime: '20 mins', ingredients: ['220g cod fillet', '1 cup wild rice', 'steamed broccoli'], instructions: ['Bake cod at 400°F', 'Serve with wild rice'] },
+        { name: 'Ribeye Steak & Sweet Potato Mash', calories: Math.round(calories * 0.36), protein: Math.round(protein * 0.38), carbs: 45, fat: 22, prepTime: '25 mins', ingredients: ['7 oz ribeye', '1 sweet potato'], instructions: ['Cast-iron sear ribeye'] },
+        { name: 'Pesto Chicken Pasta w/ Tomatoes', calories: Math.round(calories * 0.34), protein: Math.round(protein * 0.35), carbs: 60, fat: 14, prepTime: '20 mins', ingredients: ['6 oz chicken breast', '2 oz chickpea pasta', 'pesto'], instructions: ['Boil pasta', 'Toss with pesto'] },
+        { name: 'Honey Mustard Glazed Pork Tenderloin', calories: Math.round(calories * 0.33), protein: Math.round(protein * 0.34), carbs: 48, fat: 12, prepTime: '30 mins', ingredients: ['6 oz pork tenderloin', '1 cup quinoa'], instructions: ['Roast tenderloin with glaze'] },
+        { name: 'Teriyaki Tofu & Stir-Fry Noodles', calories: Math.round(calories * 0.31), protein: Math.round(protein * 0.28), carbs: 65, fat: 11, prepTime: '20 mins', ingredients: ['8 oz firm tofu', 'soba noodles'], instructions: ['Pan-fry tofu', 'Toss noodles'] },
+      ],
+      Snacks: [
+        { name: 'Whey Protein Shake & Rice Cakes', calories: Math.round(calories * 0.12), protein: Math.round(protein * 0.15), carbs: 25, fat: 3, prepTime: '5 mins', ingredients: ['1 scoop whey', '2 rice cakes'], instructions: ['Mix shake'] },
+        { name: 'Cottage Cheese & Pineapple', calories: Math.round(calories * 0.12), protein: Math.round(protein * 0.14), carbs: 20, fat: 2, prepTime: '3 mins', ingredients: ['1 cup cottage cheese', 'pineapple'], instructions: ['Combine and serve'] },
+        { name: 'Beef Jerky & Mixed Nuts', calories: Math.round(calories * 0.13), protein: Math.round(protein * 0.15), carbs: 10, fat: 12, prepTime: '2 mins', ingredients: ['2 oz jerky', '1 oz almonds'], instructions: ['Portion into container'] },
       ]
     };
 
-    const weeklyCalendar = daysToRender.map((day, idx) => {
+    const sessionUsedRecipeNames = new Set<string>();
+    const slotCounters: { [slotType: string]: number } = { Breakfast: 0, Lunch: 0, Dinner: 0, Snacks: 0 };
+
+    const weeklyCalendar = daysToRender.map((day) => {
       const requestedSlots: string[] = weeklySchedule[day] || [];
       return {
         day,
         meals: requestedSlots.map((slot) => {
-          const list = sampleMeals[slot] || sampleMeals['Lunch'];
-          const mealChoice = (varietyLevel === 1) ? list[0] : list[(idx + randomSeed) % list.length];
+          const slotType = slot === 'Snack' ? 'Snacks' : slot;
+          const fullPool = mealPools[slotType] || mealPools['Lunch'];
+
+          // Filter out recent historical recipes
+          let eligiblePool = fullPool.filter((item) => !recipeHistory.includes(item.name));
+          if (eligiblePool.length === 0) eligiblePool = fullPool;
+
+          let mealChoice: any;
+
+          switch (varietyLevel) {
+            case 5: {
+              mealChoice = eligiblePool.find((item) => !sessionUsedRecipeNames.has(item.name));
+              if (!mealChoice) mealChoice = fullPool.find((item) => !sessionUsedRecipeNames.has(item.name)) || fullPool[0];
+              sessionUsedRecipeNames.add(mealChoice.name);
+              break;
+            }
+            case 4: {
+              mealChoice = eligiblePool.find((item) => !sessionUsedRecipeNames.has(item.name)) || eligiblePool[0];
+              sessionUsedRecipeNames.add(mealChoice.name);
+              break;
+            }
+            case 3: {
+              const step = slotCounters[slotType] % Math.min(3, eligiblePool.length);
+              mealChoice = eligiblePool[step] || fullPool[0];
+              slotCounters[slotType]++;
+              break;
+            }
+            case 2: {
+              const step = slotCounters[slotType] % Math.min(2, eligiblePool.length);
+              mealChoice = eligiblePool[step] || fullPool[0];
+              slotCounters[slotType]++;
+              break;
+            }
+            case 1:
+            default: {
+              mealChoice = eligiblePool[0] || fullPool[0];
+              break;
+            }
+          }
+
           return { type: slot, ...mealChoice };
         }),
       };
@@ -143,9 +217,9 @@ ${JSON.stringify(weeklySchedule)}`;
     return NextResponse.json({
       weeklyCalendar,
       groceries: [
-        { category: 'Proteins', item: 'Assorted Meats (Beef, Chicken, Fish)', amount: `${(2.0 * scaledMultiplier).toFixed(1)} kg` },
-        { category: 'Produce', item: 'Mixed Fresh Vegetables', amount: `${(2.5 * scaledMultiplier).toFixed(1)} kg` },
-        { category: 'Grains', item: 'Rice & Grains', amount: `${(1.5 * scaledMultiplier).toFixed(1)} kg` }
+        { category: 'Proteins', item: 'Assorted Meats & Seafood', amount: `${(2.5 * scaledMultiplier).toFixed(1)} kg` },
+        { category: 'Produce', item: 'Fresh Vegetables & Greens', amount: `${(3.0 * scaledMultiplier).toFixed(1)} kg` },
+        { category: 'Grains & Carbs', item: 'Rice, Quinoa & Sweet Potatoes', amount: `${(2.0 * scaledMultiplier).toFixed(1)} kg` },
       ],
       estimatedGroceryCost: `$${baseMin} – $${baseMax} USD`,
     });
