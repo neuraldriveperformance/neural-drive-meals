@@ -159,7 +159,9 @@ export default function Home() {
           varietyLevel: variety,
           enableBulkPrep: bulkPrep,
           maxPrepTime,
-          recipeHistory, // Sending past recipe names to avoid re-generating them
+          recipeHistory,
+          seed: `${Date.now()}-${Math.random()}`,
+          isSwapRequest: false,
         }),
       });
 
@@ -173,7 +175,6 @@ export default function Home() {
       setWeeklyCalendar(generatedCalendar);
       setEstimatedCost(data.estimatedGroceryCost || `$75 – $115 USD`);
 
-      // Extract new recipe names from the generated calendar and update local history
       const newRecipeNames: string[] = [];
       generatedCalendar.forEach((dayObj: any) => {
         if (Array.isArray(dayObj.meals)) {
@@ -186,7 +187,6 @@ export default function Home() {
       });
 
       if (newRecipeNames.length > 0) {
-        // Retain up to the last 60 recipes across generations
         const updatedHistory = Array.from(new Set([...recipeHistory, ...newRecipeNames])).slice(-60);
         setRecipeHistory(updatedHistory);
         try {
@@ -230,7 +230,6 @@ export default function Home() {
   // SWAP SPECIFIC RECIPE ACROSS ALL CALENDAR DAYS
   const handleSwapMeal = async (oldMealName: string, mealType: string) => {
     try {
-      // Collect active recipe names in current calendar to prevent duplicate output
       const activeRecipeNames: string[] = [];
       weeklyCalendar?.forEach((dayObj) => {
         dayObj.meals?.forEach((m: any) => {
@@ -252,6 +251,8 @@ export default function Home() {
           varietyLevel: 5,
           maxPrepTime,
           recipeHistory: Array.from(new Set([...recipeHistory, ...activeRecipeNames, oldMealName])).slice(-60),
+          seed: `${Date.now()}-${Math.random()}`,
+          isSwapRequest: true,
         }),
       });
 
@@ -260,7 +261,6 @@ export default function Home() {
 
       if (!replacementMeal) throw new Error('Could not find a suitable replacement meal.');
 
-      // Replace every occurrence of the swapped recipe across all calendar days
       const updatedCalendar = weeklyCalendar?.map((dayObj) => ({
         ...dayObj,
         meals: dayObj.meals.map((meal: any) => (meal.name === oldMealName ? { ...replacementMeal, type: meal.type } : meal)),
@@ -270,7 +270,6 @@ export default function Home() {
         setWeeklyCalendar(updatedCalendar);
         updateGroceryMatrix(updatedCalendar);
 
-        // Append new replacement recipe to local history
         const updatedHistory = Array.from(new Set([...recipeHistory, replacementMeal.name])).slice(-60);
         setRecipeHistory(updatedHistory);
         localStorage.setItem('ndp_recipe_history', JSON.stringify(updatedHistory));
@@ -283,7 +282,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* HEADER WITH BRANDING LOGO */}
         <header className="border-b border-[#1E2D4A] pb-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="relative w-12 h-12 md:w-16 md:h-16 flex-shrink-0">
@@ -403,7 +401,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* EXCLUSIONS */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
               Dietary Exclusions / Allergies
@@ -445,7 +442,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* WEEKLY SCHEDULE MATRIX */}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase mb-3">
               Weekly Meal Schedule Matrix
@@ -481,7 +477,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* VARIETY SLIDER AND BULK PREP SECTION */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-[#1E2D4A]">
             <div>
               <div className="flex justify-between text-xs font-bold text-gray-400 mb-2 uppercase">
@@ -503,7 +498,7 @@ export default function Home() {
                   const val = Number(e.target.value);
                   setVariety(val);
                   if (val === 5) {
-                    setBulkPrep(false); // Auto-uncheck bulk prep at Level 5
+                    setBulkPrep(false);
                   }
                 }}
                 className="w-full accent-[#00F2FE]"
@@ -568,7 +563,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* OUTPUT RESULTS DISPLAY */}
         <div id="results-section" className="space-y-12">
           {weeklyCalendar && weeklyCalendar.length > 0 && (
             <div className="space-y-4">
