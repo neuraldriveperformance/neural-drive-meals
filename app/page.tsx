@@ -328,33 +328,63 @@ export default function Home() {
             </div>
           </div>
 
+          {/* VARIETY SLIDER AND BULK PREP SECTION */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-[#1E2D4A]">
             <div>
               <div className="flex justify-between text-xs font-bold text-gray-400 mb-2 uppercase">
                 <span>Meal Variety Preference</span>
-                <span className="text-[#00F2FE]">Level {variety}/5</span>
+                <span className="text-[#00F2FE]">
+                  {variety === 1 && 'Level 1/5 - Repeat Same Meals Daily'}
+                  {variety === 2 && 'Level 2/5 - Heavy Batch Cooking'}
+                  {variety === 3 && 'Level 3/5 - Balanced Rotation'}
+                  {variety === 4 && 'Level 4/5 - High Variety'}
+                  {variety === 5 && 'Level 5/5 - 100% Unique Meals Daily'}
+                </span>
               </div>
               <input
                 type="range"
                 min="1"
                 max="5"
                 value={variety}
-                onChange={(e) => setVariety(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setVariety(val);
+                  if (val === 5) {
+                    setBulkPrep(false); // Auto-uncheck bulk prep at Level 5
+                  }
+                }}
                 className="w-full accent-[#00F2FE]"
               />
+              <div className="flex justify-between text-[10px] text-gray-500 font-semibold mt-1">
+                <span>1 (Same Meals Each Day)</span>
+                <span>3 (Balanced)</span>
+                <span>5 (100% Unique Every Day)</span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 bg-[#162032] border border-[#1E2D4A] p-3 rounded-xl">
+            <div
+              className={`flex items-center gap-3 bg-[#162032] border border-[#1E2D4A] p-3 rounded-xl transition ${
+                variety === 5 ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
               <input
                 type="checkbox"
                 id="bulkPrep"
                 checked={bulkPrep}
+                disabled={variety === 5}
                 onChange={(e) => setBulkPrep(e.target.checked)}
-                className="w-5 h-5 accent-[#00F2FE] rounded cursor-pointer"
+                className="w-5 h-5 accent-[#00F2FE] rounded cursor-pointer disabled:cursor-not-allowed"
               />
-              <label htmlFor="bulkPrep" className="cursor-pointer">
+              <label
+                htmlFor="bulkPrep"
+                className={variety === 5 ? 'cursor-not-allowed' : 'cursor-pointer'}
+              >
                 <div className="text-xs font-bold text-white">Bulk Batch Prep</div>
-                <div className="text-[10px] text-gray-400">Repeat batch cooked meals across days</div>
+                <div className="text-[10px] text-gray-400">
+                  {variety === 5
+                    ? 'Disabled at Level 5 Variety (requires 100% unique meals)'
+                    : 'Repeat batch cooked meals across days'}
+                </div>
               </label>
             </div>
           </div>
