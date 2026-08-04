@@ -16,10 +16,14 @@ export async function POST(req: Request) {
     const weeklySchedule = body.weeklySchedule || {};
     const seed = body.seed || `${Date.now()}-${Math.random()}`;
     const isSwapRequest = Boolean(body.isSwapRequest);
-    
+
     // Read recent recipe history (up to 60 recipes) sent from client
     const rawHistory: string[] = body.recipeHistory || [];
     const recipeHistory = rawHistory.slice(-60);
+
+    // Safely retrieve first scheduled meal type for swap fallback without TS errors
+    const scheduleValues = Object.values(weeklySchedule) as string[][];
+    const defaultMealType = scheduleValues?.[0]?.[0] || 'Meal';
 
     // Parse max prep time into numerical minutes for filtering
     const prepTimeMap: { [key: string]: number } = {
@@ -63,7 +67,7 @@ Return strictly in this JSON format:
       "day": "MON",
       "meals": [
         {
-          "type": "${Object.values(weeklySchedule)?.[0]?.[0] || 'Meal'}",
+          "type": "${defaultMealType}",
           "name": "Unique Recipe Name",
           "calories": 600,
           "protein": 45,
