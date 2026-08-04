@@ -76,6 +76,66 @@ export default function Home() {
     setExclusions(exclusions.filter((e) => e !== item));
   };
 
+  // RECALCULATE GROCERIES ON THE FLY WHEN A MEAL IS SWAPPED
+  const updateGroceryMatrix = (calendarData: any[]) => {
+    const rawGroceryMap: { [itemName: string]: number } = {};
+
+    calendarData.forEach((dayObj) => {
+      if (Array.isArray(dayObj.meals)) {
+        dayObj.meals.forEach((meal: any) => {
+          if (Array.isArray(meal.ingredients)) {
+            meal.ingredients.forEach((ing: string) => {
+              rawGroceryMap[ing] = (rawGroceryMap[ing] || 0) + 1;
+            });
+          }
+        });
+      }
+    });
+
+    const categorizeItem = (name: string): string => {
+      const lower = name.toLowerCase();
+      if (
+        lower.includes('beef') || lower.includes('steak') || lower.includes('chicken') ||
+        lower.includes('turkey') || lower.includes('salmon') || lower.includes('cod') ||
+        lower.includes('tuna') || lower.includes('sausage') || lower.includes('egg') ||
+        lower.includes('yogurt') || lower.includes('whey') || lower.includes('cottage cheese')
+      ) {
+        return 'Proteins';
+      }
+      if (
+        lower.includes('spinach') || lower.includes('zucchini') || lower.includes('asparagus') ||
+        lower.includes('pepper') || lower.includes('cucumber') || lower.includes('broccoli') ||
+        lower.includes('tomato') || lower.includes('avocado') || lower.includes('blueberry') ||
+        lower.includes('pineapple') || lower.includes('apple') || lower.includes('banana')
+      ) {
+        return 'Produce';
+      }
+      if (
+        lower.includes('rice') || lower.includes('oats') || lower.includes('quinoa') ||
+        lower.includes('potato') || lower.includes('pasta') || lower.includes('bread') ||
+        lower.includes('tortilla') || lower.includes('oatmeal')
+      ) {
+        return 'Grains & Carbs';
+      }
+      return 'Pantry / Condiments';
+    };
+
+    const categoryMap: { [cat: string]: { item: string; amount: string }[] } = {};
+
+    Object.keys(rawGroceryMap).forEach((ingredient) => {
+      const category = categorizeItem(ingredient);
+      if (!categoryMap[category]) categoryMap[category] = [];
+      categoryMap[category].push({ item: ingredient, amount: '' });
+    });
+
+    const formattedGroceries: GroceryCategory[] = Object.keys(categoryMap).map((cat) => ({
+      category: cat,
+      items: categoryMap[cat],
+    }));
+
+    setGroceries(formattedGroceries);
+  };
+
   const handleGeneratePlan = async () => {
     if (!disclaimerAgreed) {
       alert('Please read and check the legal disclaimer before generating a plan.');
@@ -164,6 +224,59 @@ export default function Home() {
       alert(`Error: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // SWAP SPECIFIC RECIPE ACROSS ALL CALENDAR DAYS
+  const handleSwapMeal = async (oldMealName: string, mealType: string) => {
+    try {
+      // Collect active recipe names in current calendar to prevent duplicate output
+      const activeRecipeNames: string[] = [];
+      weeklyCalendar?.forEach((dayObj) => {
+        dayObj.meals?.forEach((m: any) => {
+          if (m.name && m.name !== oldMealName) activeRecipeNames.push(m.name);
+        });
+      });
+
+      const response = await fetch('/api/generate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: clientName,
+          targetCalories: dailyCalories,
+          targetProteinGrams: proteinTarget,
+          exclusions,
+          householdSize,
+          budgetLevel: budget,
+          weeklySchedule: { MON: [mealType] },
+          varietyLevel: 5,
+          maxPrepTime,
+          recipeHistory: Array.from(new Set([...recipeHistory, ...activeRecipeNames, oldMealName])).slice(-60),
+        }),
+      });
+
+      const data = await response.json();
+      const replacementMeal = data.weeklyCalendar?.[0]?.meals?.[0];
+
+      if (!replacementMeal) throw new Error('Could not find a suitable replacement meal.');
+
+      // Replace every occurrence of the swapped recipe across all calendar days
+      const updatedCalendar = weeklyCalendar?.map((dayObj) => ({
+        ...dayObj,
+        meals: dayObj.meals.map((meal: any) => (meal.name === oldMealName ? { ...replacementMeal, type: meal.type } : meal)),
+      })) || null;
+
+      if (updatedCalendar) {
+        setWeeklyCalendar(updatedCalendar);
+        updateGroceryMatrix(updatedCalendar);
+
+        // Append new replacement recipe to local history
+        const updatedHistory = Array.from(new Set([...recipeHistory, replacementMeal.name])).slice(-60);
+        setRecipeHistory(updatedHistory);
+        localStorage.setItem('ndp_recipe_history', JSON.stringify(updatedHistory));
+      }
+    } catch (err: any) {
+      alert(`Unable to swap meal: ${err.message}`);
     }
   };
 
@@ -462,7 +575,7 @@ export default function Home() {
               <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wider">
                 1. Weekly Calendar Protocol
               </h2>
-              <MealPlanCalendar calendarDays={weeklyCalendar} />
+              <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
             </div>
           )}
 

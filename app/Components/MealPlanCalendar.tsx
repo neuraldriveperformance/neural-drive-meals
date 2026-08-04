@@ -21,6 +21,7 @@ export interface DayPlan {
 
 interface MealPlanCalendarProps {
   calendarDays: DayPlan[];
+  onSwapMeal?: (mealName: string, mealType: string) => Promise<void> | void;
 }
 
 const MEAL_ORDER: { [key: string]: number } = {
@@ -31,8 +32,9 @@ const MEAL_ORDER: { [key: string]: number } = {
   Snack: 4,
 };
 
-export default function MealPlanCalendar({ calendarDays }: MealPlanCalendarProps) {
+export default function MealPlanCalendar({ calendarDays, onSwapMeal }: MealPlanCalendarProps) {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
+  const [swappingMealName, setSwappingMealName] = useState<string | null>(null);
 
   if (!calendarDays || calendarDays.length === 0) {
     return (
@@ -98,6 +100,16 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
     printWindow.print();
   };
 
+  const handleSwapClick = async (meal: Meal) => {
+    if (!onSwapMeal) return;
+    setSwappingMealName(meal.name);
+    try {
+      await onSwapMeal(meal.name, meal.type);
+    } finally {
+      setSwappingMealName(null);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
       {calendarDays.map((dayPlan, dIdx) => {
@@ -132,6 +144,7 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                 sortedMeals.map((meal, mIdx) => {
                   const mealId = `${dayPlan.day}-${mIdx}`;
                   const isExpanded = expandedMeal === mealId;
+                  const isSwapping = swappingMealName === meal.name;
 
                   return (
                     <div
@@ -177,7 +190,7 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                         {isExpanded ? 'Hide ▲' : 'Recipe ▼'}
                       </button>
 
-                      {/* RECIPE DETAILS & PRINT/SHARE */}
+                      {/* RECIPE DETAILS & ACTION BUTTON MATRIX */}
                       {isExpanded && (
                         <div className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]">
                           <div>
@@ -202,20 +215,31 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                             </ol>
                           </div>
 
-                          {/* PRINT & SHARE BUTTON MATRIX */}
-                          <div className="flex gap-1.5 pt-2 border-t border-[#1E2D4A]/50">
+                          {/* ACTION BUTTON MATRIX */}
+                          <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[#1E2D4A]/50">
                             <button
                               onClick={() => handlePrintRecipe(meal)}
-                              className="flex-1 bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition"
+                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
                             >
                               🖨️ Print
                             </button>
                             <button
                               onClick={() => handleShareRecipe(meal)}
-                              className="flex-1 bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition"
+                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
                             >
                               📤 Share
                             </button>
+                            {onSwapMeal && (
+                              <button
+                                onClick={() => handleSwapClick(meal)}
+                                disabled={isSwapping}
+                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center ${
+                                  isSwapping ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
+                              >
+                                {isSwapping ? '⏳...' : '🔄 Swap'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}
