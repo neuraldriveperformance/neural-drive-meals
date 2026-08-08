@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export async function POST(req: Request) {
   try {
@@ -17,15 +20,12 @@ export async function POST(req: Request) {
     const seed = body.seed || `${Date.now()}-${Math.random()}`;
     const isSwapRequest = Boolean(body.isSwapRequest);
 
-    // Read recent recipe history (up to 60 recipes) sent from client
     const rawHistory: string[] = body.recipeHistory || [];
     const recipeHistory = rawHistory.slice(-60);
 
-    // Safely retrieve first scheduled meal type for swap fallback without TS errors
     const scheduleValues = Object.values(weeklySchedule) as string[][];
     const defaultMealType = scheduleValues?.[0]?.[0] || 'Meal';
 
-    // Parse max prep time into numerical minutes for filtering
     const prepTimeMap: { [key: string]: number } = {
       '15-mins': 15,
       '30-mins': 30,
@@ -41,10 +41,10 @@ export async function POST(req: Request) {
       ? `STRICT EXCLUSIONS (DO NOT REPEAT ANY OF THESE RECIPES): ${JSON.stringify(recipeHistory)}.`
       : '';
 
-    let systemPrompt = '';
+    let prompt = '';
 
     if (isSwapRequest) {
-      systemPrompt = `You are an elite sports nutritionist for Neural Drive Performance.
+      prompt = `You are an elite sports nutritionist for Neural Drive Performance.
 Generate EXACTLY ONE SINGLE unique replacement meal matching the client macros and exclusions.
 UNIQUE SEED FOR THIS SWAP: [${seed}]
 
@@ -82,8 +82,7 @@ Return strictly in this JSON format:
   ]
 }`;
     } else {
-      // Full weekly plan prompt
-      systemPrompt = `You are an elite sports nutritionist for Neural Drive Performance.
+      prompt = `You are an elite sports nutritionist for Neural Drive Performance.
 Generate a dynamic, structured JSON meal plan strictly adhering to the requirements below.
 
 DYNAMIC UNIQUE SEED: [${seed}]
@@ -115,37 +114,25 @@ Schedule Matrix requested:
 ${JSON.stringify(weeklySchedule)}`;
     }
 
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o',
-            messages: [{ role: 'system', content: systemPrompt }],
-            response_format: { type: 'json_object' },
-            temperature: 0.9,
-          }),
-        });
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
 
-        if (openAiRes.ok) {
-          const aiData = await openAiRes.json();
-          const parsedContent = JSON.parse(aiData.choices[0].message.content);
-          return NextResponse.json(parsedContent);
-        }
-      } catch (e) {
-        console.warn('OpenAI API call failed:', e);
-      }
+    if (response.text) {
+      const parsedContent = JSON.parse(response.text);
+      return NextResponse.json(parsedContent);
     }
 
     return NextResponse.json(
-      { error: 'OpenAI API key missing or request failed.' },
+      { error: 'Gemini generation returned empty response.' },
       { status: 500 }
     );
   } catch (error: any) {
+    console.error('Gemini API Error:', error);
     return NextResponse.json(
       { error: error.message || 'Internal Server Error' },
       { status: 500 }
