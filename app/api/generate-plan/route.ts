@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
-
-// Initialize the Google Gen AI SDK securely using environment variables
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    
     if (!apiKey) {
       return NextResponse.json(
-        { error: { code: 403, message: 'API key is missing or not configured in environment variables.', status: 'PERMISSION_DENIED' } },
+        { error: 'API key is missing in Vercel environment variables.' },
         { status: 403 }
       );
     }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const body = await req.json();
     const {
@@ -31,8 +32,8 @@ export async function POST(req: Request) {
     } = body;
 
     const prompt = `
-      You are an expert sports nutritionist and elite meal planning architect for Neural Drive Performance.
-      Generate a customized, professional weekly meal plan based on the following client profile parameters:
+      You are an expert sports nutritionist for Neural Drive Performance.
+      Generate a customized, professional weekly meal plan based on these parameters:
       - Client Name: ${name || 'Valued Client'}
       - Target Daily Calories: ${targetCalories || 'Balanced'} kcal
       - Target Daily Protein: ${targetProteinGrams || 'Optimized'} grams
@@ -43,15 +44,14 @@ export async function POST(req: Request) {
       - Weekly Schedule Matrix: ${JSON.stringify(weeklySchedule)}
       - Variety Preference Level (1 to 5): ${varietyLevel || 3}
       - Bulk Batch Prep Enabled: ${enableBulkPrep ? 'Yes' : 'No'}
-      - Is this a single meal swap request: ${isSwapRequest ? 'Yes' : 'No'}
-      - Previous Recipe History to Avoid Repeating: ${JSON.stringify(recipeHistory || [])}
+      - Single Meal Swap Request: ${isSwapRequest ? 'Yes' : 'No'}
+      - Recipe History: ${JSON.stringify(recipeHistory || [])}
 
-      Return your output strictly as a JSON object matching this structure:
+      Return your output strictly as valid JSON matching this exact structure:
       {
         "estimatedGroceryCost": "$XX – $YY USD",
         "groceries": [
-          { "category": "Proteins", "item": "Chicken Breast", "amount": "2 lbs" },
-          { "category": "Produce", "item": "Spinach", "amount": "1 bag" }
+          { "category": "Proteins", "item": "Chicken Breast", "amount": "2 lbs" }
         ],
         "weeklyCalendar": [
           {
@@ -59,12 +59,12 @@ export async function POST(req: Request) {
             "meals": [
               {
                 "type": "Lunch",
-                "name": "Recipe Name Here",
+                "name": "Recipe Name",
                 "calories": 600,
                 "protein": 45,
                 "prepTime": "20 mins",
                 "ingredients": ["1 cup rice", "200g chicken"],
-                "instructions": "Step-by-step instructions..."
+                "instructions": "Step-by-step prep..."
               }
             ]
           }
@@ -72,26 +72,20 @@ export async function POST(req: Request) {
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    const responseText = response.text;
-    if (!responseText) {
-      throw new Error('No response received from the Gemini model.');
-    }
+    // Clean JSON formatting if markdown backticks are present
+    const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(cleanedText);
 
-    const parsedData = JSON.parse(responseText);
     return NextResponse.json(parsedData);
 
   } catch (error: any) {
-    console.error('Error in /api/generate-plan:', error);
+    console.error('Error generating meal plan:', error);
     return NextResponse.json(
-      { error: { code: 500, message: error.message || 'Internal Server Error', status: 'API_ERROR' } },
+      { error: error.message || 'Failed to generate meal plan' },
       { status: 500 }
     );
   }
