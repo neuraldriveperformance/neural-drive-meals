@@ -1,140 +1,97 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// Initialize the Google Gen AI SDK securely using environment variables
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 
 export async function POST(req: Request) {
   try {
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: { code: 403, message: 'API key is missing or not configured in environment variables.', status: 'PERMISSION_DENIED' } },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
+    const {
+      name,
+      targetCalories,
+      targetProteinGrams,
+      exclusions,
+      householdSize,
+      budgetLevel,
+      weeklySchedule,
+      varietyLevel,
+      enableBulkPrep,
+      maxPrepTime,
+      recipeHistory,
+      isSwapRequest,
+    } = body;
 
-    const clientName = body.name || 'Client';
-    const calories = Number(body.targetCalories) || 2450;
-    const protein = Number(body.targetProteinGrams) || 160;
-    const householdSize = Number(body.householdSize) || 1;
-    const exclusions = body.exclusions?.length ? body.exclusions.join(', ') : 'None';
-    const budgetLevel = body.budgetLevel || 'moderate';
-    const maxPrepTime = body.maxPrepTime || 'no-limit';
-    const varietyLevel = Number(body.varietyLevel) || 3;
-    const enableBulkPrep = body.enableBulkPrep ?? false;
-    const weeklySchedule = body.weeklySchedule || {};
-    const seed = body.seed || `${Date.now()}-${Math.random()}`;
-    const isSwapRequest = Boolean(body.isSwapRequest);
+    const prompt = `
+      You are an expert sports nutritionist and elite meal planning architect for Neural Drive Performance.
+      Generate a customized, professional weekly meal plan based on the following client profile parameters:
+      - Client Name: ${name || 'Valued Client'}
+      - Target Daily Calories: ${targetCalories || 'Balanced'} kcal
+      - Target Daily Protein: ${targetProteinGrams || 'Optimized'} grams
+      - Household Size: ${householdSize || 1} person(s)
+      - Budget Level: ${budgetLevel || 'moderate'}
+      - Maximum Prep/Cook Time Per Meal: ${maxPrepTime || 'no-limit'}
+      - Dietary Exclusions / Allergies: ${exclusions?.length ? exclusions.join(', ') : 'None'}
+      - Weekly Schedule Matrix: ${JSON.stringify(weeklySchedule)}
+      - Variety Preference Level (1 to 5): ${varietyLevel || 3}
+      - Bulk Batch Prep Enabled: ${enableBulkPrep ? 'Yes' : 'No'}
+      - Is this a single meal swap request: ${isSwapRequest ? 'Yes' : 'No'}
+      - Previous Recipe History to Avoid Repeating: ${JSON.stringify(recipeHistory || [])}
 
-    const rawHistory: string[] = body.recipeHistory || [];
-    const recipeHistory = rawHistory.slice(-60);
-
-    const scheduleValues = Object.values(weeklySchedule) as string[][];
-    const defaultMealType = scheduleValues?.[0]?.[0] || 'Meal';
-
-    const prepTimeMap: { [key: string]: number } = {
-      '15-mins': 15,
-      '30-mins': 30,
-      '45-mins': 45,
-      '60-mins': 60,
-      '90-mins': 90,
-      '120-mins': 120,
-      'no-limit': 999,
-    };
-    const maxPrepMinutes = prepTimeMap[maxPrepTime] || 999;
-
-    const historyPrompt = recipeHistory.length > 0 
-      ? `STRICT EXCLUSIONS (DO NOT REPEAT ANY OF THESE RECIPES): ${JSON.stringify(recipeHistory)}.`
-      : '';
-
-    let prompt = '';
-
-    if (isSwapRequest) {
-      prompt = `You are an elite sports nutritionist for Neural Drive Performance.
-Generate EXACTLY ONE SINGLE unique replacement meal matching the client macros and exclusions.
-UNIQUE SEED FOR THIS SWAP: [${seed}]
-
-${historyPrompt}
-
-CRITICAL MACROS RULE:
-The meal object MUST contain ALL FOUR explicit numerical macro fields:
-- "calories": integer (kcal)
-- "protein": integer (grams)
-- "carbs": integer (grams)
-- "fat": integer (grams)
-
-PREP & COOK TIME RULE:
-- Maximum prep/cook time allowed is ${maxPrepMinutes === 999 ? 'unlimited' : `${maxPrepMinutes} minutes`}.
-
-Return strictly in this JSON format:
-{
-  "weeklyCalendar": [
-    {
-      "day": "MON",
-      "meals": [
-        {
-          "type": "${defaultMealType}",
-          "name": "Unique Recipe Name",
-          "calories": 600,
-          "protein": 45,
-          "carbs": 50,
-          "fat": 20,
-          "prepTime": "20 mins",
-          "ingredients": ["Ingredient 1", "Ingredient 2"],
-          "instructions": ["Step 1", "Step 2"]
-        }
-      ]
-    }
-  ]
-}`;
-    } else {
-      prompt = `You are an elite sports nutritionist for Neural Drive Performance.
-Generate a dynamic, structured JSON meal plan strictly adhering to the requirements below.
-
-DYNAMIC UNIQUE SEED: [${seed}]
-CRITICAL INSTRUCTION: Generate a FRESH, CREATIVE meal plan different from any previous generation.
-
-${historyPrompt}
-
-CRITICAL MACROS RULE:
-Each meal object MUST contain ALL FOUR explicit numerical macro fields:
-- "calories": integer (kcal)
-- "protein": integer (grams)
-- "carbs": integer (grams)
-- "fat": integer (grams)
-
-PREP & COOK TIME RULE:
-- Maximum prep/cook time allowed per meal is ${maxPrepMinutes === 999 ? 'unlimited' : `${maxPrepMinutes} minutes`}.
-- Every meal's "prepTime" field MUST NOT exceed this duration limit.
-
-CLIENT PROFILE:
-- Name: ${clientName}
-- Daily Target: ${calories} kcal, ${protein}g Protein
-- Household Multiplier: ${householdSize} person(s)
-- Dietary Exclusions/Allergies: ${exclusions}
-- Budget Tier: ${budgetLevel}
-- Variety Scale (${varietyLevel}/5 Rules)
-- Bulk Prep Toggle State: ${enableBulkPrep ? 'Enabled' : 'Disabled'}
-
-Schedule Matrix requested:
-${JSON.stringify(weeklySchedule)}`;
-    }
+      Return your output strictly as a JSON object matching this structure:
+      {
+        "estimatedGroceryCost": "$XX – $YY USD",
+        "groceries": [
+          { "category": "Proteins", "item": "Chicken Breast", "amount": "2 lbs" },
+          { "category": "Produce", "item": "Spinach", "amount": "1 bag" }
+        ],
+        "weeklyCalendar": [
+          {
+            "day": "MON",
+            "meals": [
+              {
+                "type": "Lunch",
+                "name": "Recipe Name Here",
+                "calories": 600,
+                "protein": 45,
+                "prepTime": "20 mins",
+                "ingredients": ["1 cup rice", "200g chicken"],
+                "instructions": "Step-by-step instructions..."
+              }
+            ]
+          }
+        ]
+      }
+    `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
       },
     });
 
-    if (response.text) {
-      const parsedContent = JSON.parse(response.text);
-      return NextResponse.json(parsedContent);
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error('No response received from the Gemini model.');
     }
 
-    return NextResponse.json(
-      { error: 'Gemini generation returned empty response.' },
-      { status: 500 }
-    );
+    const parsedData = JSON.parse(responseText);
+    return NextResponse.json(parsedData);
+
   } catch (error: any) {
-    console.error('Gemini API Error:', error);
+    console.error('Error in /api/generate-plan:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
+      { error: { code: 500, message: error.message || 'Internal Server Error', status: 'API_ERROR' } },
       { status: 500 }
     );
   }
