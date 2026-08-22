@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       clientCalories,
       clientProtein,
       clientExclusions = [],
-      household = { adults: 1, children: 0, familyDislikes: [] },
+      household = { adults: 1, teens: 0, children: 0, familyDislikes: [] },
       totalPortionWeight = 1.0,
       budgetLevel = 'moderate',
       weeklySchedule = {},
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         fat: 16,
         ingredients: ['6oz 93/7 Ground Beef', '1 cup Brown Rice', '1 cup Roasted Peppers'],
         instructions: ['Brown beef in skillet.', 'Combine with cooked brown rice and veggies.'],
-        familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
+        familyFriendlyNote: 'Serve veggies on the side if preferred by children or teens.',
       },
       {
         name: 'Grilled Chicken & Quinoa Harvest Salad',
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
         fat: 18,
         ingredients: ['6oz Chicken Breast', '1 cup Quinoa', 'Mixed Greens', '2 tbsp Vinaigrette'],
         instructions: ['Grill chicken breasts.', 'Slice and serve over bed of dressed greens and quinoa.'],
-        familyFriendlyNote: 'Keep dressing on the side for children.',
+        familyFriendlyNote: 'Keep dressing on the side for younger family members.',
       },
       {
         name: 'Turkey Burrito Bowl with Black Beans',
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
         fat: 15,
         ingredients: ['6oz Lean Ground Turkey', '1/2 cup Black Beans', '1 cup White Rice', 'Salsa'],
         instructions: ['Cook turkey with mild cumin and garlic.', 'Layer over rice and beans.'],
-        familyFriendlyNote: 'Keep spicy salsa separate for kids.',
+        familyFriendlyNote: 'Keep spicy salsa separate for kids and teens.',
       },
     ];
 
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
               fat: 12,
               ingredients: ['Greek Yogurt', 'Berries', 'Almonds'],
               instructions: ['Combine ingredients and serve.'],
-              familyFriendlyNote: 'Easily adjustable portion size for kids.',
+              familyFriendlyNote: 'Easily adjustable portion sizes across kids and teens.',
             };
           }
 

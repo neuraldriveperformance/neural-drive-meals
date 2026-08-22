@@ -9,6 +9,7 @@ const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 
 interface HouseholdConfig {
   adults: number;
+  teens: number;
   children: number;
   familyDislikes: string[];
 }
@@ -33,9 +34,10 @@ export default function Home() {
   const [clientExclusions, setClientExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
-  // 2. Household Scaling Layer
+  // 2. Household Scaling Layer with Adults, Teens, and Children
   const [household, setHousehold] = useState<HouseholdConfig>({
     adults: 1,
+    teens: 0,
     children: 0,
     familyDislikes: [],
   });
@@ -66,7 +68,10 @@ export default function Home() {
     SUN: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'off', shared: false }, Dinner: { status: 'off', shared: false }, Snacks: { status: 'off', shared: false } },
   });
 
-  const totalPortionWeight = household.adults + household.children * 0.5;
+  // Calculate Portion Weight based on Adult (1.0x), Teen (0.8x), and Child (0.5x) Coefficients
+  const totalPortionWeight = Number(
+    (household.adults * 1.0 + household.teens * 0.8 + household.children * 0.5).toFixed(1)
+  );
 
   useEffect(() => {
     try {
@@ -77,7 +82,6 @@ export default function Home() {
     }
   }, []);
 
-  // Handlers
   const addClientExclusion = () => {
     const val = exclusionInput.trim();
     if (val && !clientExclusions.includes(val)) {
@@ -217,7 +221,6 @@ export default function Home() {
 
         {/* CONFIGURATION PANEL */}
         <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
-          
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
             {/* COLUMN 1: CLIENT NUTRITION LAYER */}
@@ -307,7 +310,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* COLUMN 2: HOUSEHOLD SCALING LAYER */}
+            {/* COLUMN 2: EXPANDED HOUSEHOLD SCALING LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4 flex flex-col justify-between">
               <div>
                 <div className="border-b border-[#1E2D4A] pb-3 mb-4">
@@ -315,54 +318,82 @@ export default function Home() {
                     2. Household Scaling Layer (Grocery & Portions)
                   </h2>
                   <p className="text-[11px] text-gray-400 mt-0.5">
-                    Scales raw grocery quantities on shared meals without altering client macros.
+                    Scales raw grocery quantities on shared meals using unique age-group portion multipliers.
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-white">Adults (1.0x)</div>
-                        <div className="text-[10px] text-gray-500">Includes Client</div>
+                  {/* Adult, Teen, and Child Counters */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Adults Counter */}
+                    <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
+                      <div className="mb-2">
+                        <div className="text-xs font-bold text-white">Adults</div>
+                        <div className="text-[9px] text-gray-400">1.0x Portion</div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between">
                         <button
                           type="button"
                           onClick={() => setHousehold({ ...household, adults: Math.max(1, household.adults - 1) })}
-                          className="w-6 h-6 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
                         >
                           -
                         </button>
-                        <span className="text-sm font-extrabold text-[#00F2FE] w-4 text-center">{household.adults}</span>
+                        <span className="text-xs font-extrabold text-[#00F2FE]">{household.adults}</span>
                         <button
                           type="button"
                           onClick={() => setHousehold({ ...household, adults: household.adults + 1 })}
-                          className="w-6 h-6 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
                         >
                           +
                         </button>
                       </div>
                     </div>
 
-                    <div className="bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-white">Children (0.5x)</div>
-                        <div className="text-[10px] text-gray-500">Half Portions</div>
+                    {/* Teens Counter */}
+                    <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
+                      <div className="mb-2">
+                        <div className="text-xs font-bold text-white">Teens</div>
+                        <div className="text-[9px] text-gray-400">0.8x Portion</div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between">
                         <button
                           type="button"
-                          onClick={() => setHousehold({ ...household, children: Math.max(0, household.children - 1) })}
-                          className="w-6 h-6 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                          onClick={() => setHousehold({ ...household, teens: Math.max(0, household.teens - 1) })}
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
                         >
                           -
                         </button>
-                        <span className="text-sm font-extrabold text-[#00F2FE] w-4 text-center">{household.children}</span>
+                        <span className="text-xs font-extrabold text-[#00F2FE]">{household.teens}</span>
+                        <button
+                          type="button"
+                          onClick={() => setHousehold({ ...household, teens: household.teens + 1 })}
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Children Counter */}
+                    <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
+                      <div className="mb-2">
+                        <div className="text-xs font-bold text-white">Children</div>
+                        <div className="text-[9px] text-gray-400">0.5x Portion</div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => setHousehold({ ...household, children: Math.max(0, household.children - 1) })}
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                        >
+                          -
+                        </button>
+                        <span className="text-xs font-extrabold text-[#00F2FE]">{household.children}</span>
                         <button
                           type="button"
                           onClick={() => setHousehold({ ...household, children: household.children + 1 })}
-                          className="w-6 h-6 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
                         >
                           +
                         </button>
@@ -370,9 +401,10 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {/* Multiplier Readout */}
                   <div className="bg-[#0F1724]/80 border border-[#00F2FE]/30 p-2.5 rounded-lg text-center">
                     <span className="text-xs text-gray-300">
-                      Total Shared Meal Yield Multiplier: <strong className="text-[#00F2FE] text-sm">{totalPortionWeight}x Adult Portions</strong>
+                      Shared Meal Multiplier: <strong className="text-[#00F2FE] text-sm">{totalPortionWeight}x Adult Portions</strong>
                     </span>
                   </div>
 
@@ -422,7 +454,6 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-              {/* Variety Slider */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <label className="font-bold text-gray-300 uppercase text-[10px]">
@@ -450,7 +481,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* Bulk Prep Toggle */}
               <div className="flex items-center justify-between bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl">
                 <div>
                   <div className="text-xs font-bold text-white">Enable Batch Cooking Strategy</div>
@@ -469,7 +499,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* SCHEDULE MATRIX WITH SHARED TOGGLES */}
+          {/* SCHEDULE MATRIX */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -619,7 +649,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* RECIPE DETAILS MODAL WITH FAMILY TIP BADGE */}
+      {/* RECIPE DETAILS MODAL */}
       {selectedMeal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
           <div className="bg-[#0F1724] border border-[#00F2FE]/40 rounded-2xl p-6 max-w-xl w-full max-h-[85vh] overflow-y-auto relative text-white shadow-2xl space-y-4">
