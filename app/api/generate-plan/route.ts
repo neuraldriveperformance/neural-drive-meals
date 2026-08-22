@@ -1,122 +1,150 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key is missing in Vercel environment variables.' },
-        { status: 403 }
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
-
     const body = await req.json();
+
     const {
       name,
+      familyMembers = [],
+      householdSize = 1,
       targetCalories,
       targetProteinGrams,
-      exclusions,
-      householdSize,
-      budgetLevel,
-      weeklySchedule,
-      varietyLevel,
-      enableBulkPrep,
-      maxPrepTime,
-      recipeHistory,
-      isSwapRequest,
+      exclusions = [],
+      budgetLevel = 'moderate',
+      weeklySchedule = {},
+      varietyLevel = 3,
+      enableBulkPrep = false,
+      maxPrepTime = 'no-limit',
+      recipeHistory = [],
+      isSwapRequest = false,
     } = body;
 
-    const prompt = `
-      You are an expert sports nutritionist and head chef for Neural Drive Performance.
-      Generate a customized, professional, macro-accurate weekly meal plan and consolidated grocery list.
+    // 1. Build Family Context Prompt
+    const familyDetailsPrompt = familyMembers.length > 0
+      ? familyMembers
+          .map(
+            (m: any, idx: number) =>
+              `- Member ${idx + 1} (${m.name || 'Unnamed'}): ${m.calories || 'N/A'} kcal, ${m.protein || 'N/A'}g protein. Specific Exclusions: ${m.exclusions?.join(', ') || 'None'}`
+          )
+          .join('\n')
+      : 'Single user profile';
 
-      CLIENT & PERFORMANCE PARAMETERS:
-      - Client Name: ${name || 'Valued Client'}
-      - Daily Target Calories: ${targetCalories || 'Balanced'} kcal
-      - Daily Target Protein: ${targetProteinGrams || 'Optimized'} grams
-      - Household Size / Servings Multiplier: ${householdSize || 1} person(s)
-      - Budget Level: ${budgetLevel || 'moderate'}
-      - Maximum Prep & Cook Time per Meal: ${maxPrepTime || 'no-limit'}
-      - Dietary Exclusions / Allergies: ${exclusions?.length ? exclusions.join(', ') : 'None'}
-      - Weekly Schedule Matrix: ${JSON.stringify(weeklySchedule || {})}
-      - Variety Score (1=High Repetition/Prep Friendly, 5=Maximum Variety): ${varietyLevel || 3}
-      - Bulk Batch Prep Enabled: ${enableBulkPrep ? 'Yes' : 'No'}
-      - Single Meal Swap Request: ${isSwapRequest ? 'Yes' : 'No'}
-      - Recipe History (DO NOT REPEAT RECENT MEALS): ${JSON.stringify(recipeHistory || [])}
+    // 2. Build Core System & User Prompts for LLM Generation
+    const systemPrompt = `You are an elite sports nutritionist and family meal planner for Neural Drive Performance.
+Your task is to generate a custom, highly tailored weekly meal plan and consolidated grocery list.
+Always output strict JSON with no markdown formatting surrounding the JSON response unless required.`;
 
-      TRIPLE-TOGGLE CALENDAR MATRIX RULES (CRITICAL):
-      The input 'weeklySchedule' maps days (MON-SUN) to meal slots (Breakfast, Lunch, Dinner, Snacks) with one of three states:
-      1. "generate": Create a full, fresh sports-nutrition recipe. The combined calories and protein across all scheduled slots for that day MUST hit the daily target.
-      2. "self": Return a placeholder meal item with:
-         - "name": "Self-Provided Meal / Dining Out"
-         - "prepTime": "0 mins"
-         - "ingredients": ["Client choice / Dining out / Personal meal prep"]
-         - "instructions": ["Maintain target macros for this slot."]
-         - Assign realistic estimated calories, protein, carbs, and fat fitting that meal slot towards the daily macros.
-      3. "off": Omit this slot entirely from the generated calendar. Do not create a meal for this slot.
+    const userPrompt = `
+Generate a ${isSwapRequest ? 'single replacement meal' : 'full weekly meal plan'} with the following specifications:
 
-      ADDITIONAL NUTRITIONAL & CHEF DIRECTIVES:
-      - Household Scaling: Scale grocery quantities to feed ${householdSize || 1} person(s), but keep meal macro calculations formatted per single serving.
-      - Prep Time Limit: Strict adherence to '${maxPrepTime || 'no-limit'}'. If a time limit is set (e.g. '15-mins', '30-mins'), all generated recipes MUST be executable within that duration.
-      - Recipe Uniqueness: Avoid recipes listed in the provided 'recipeHistory'.
-      - Grocery Consolidation: Combine matching ingredients across days into a clean, categorized shopping list (e.g., Proteins, Produce, Pantry Staples) with accurate total units for ${householdSize || 1} person(s).
+### FAMILY & HOUSEHOLD CONFIGURATION
+- Account Name: ${name}
+- Total Household Size: ${householdSize} person(s)
+- Total Household Daily Target Calories: ${targetCalories ? `${targetCalories} kcal` : 'Not specified'}
+- Total Household Daily Target Protein: ${targetProteinGrams ? `${targetProteinGrams}g` : 'Not specified'}
+- Individual Member Breakdown:
+${familyDetailsPrompt}
 
-      Return your output strictly as valid JSON matching this exact structure:
-      {
-        "estimatedGroceryCost": "$XX – $YY USD",
-        "groceries": [
-          { "category": "Proteins", "item": "Chicken Breast", "amount": "3.5 lbs" }
+### DIETARY & PREFERENCE CONSTRAINTS
+- Strict Household Exclusions / Allergies: ${exclusions.length > 0 ? exclusions.join(', ') : 'None'}
+- Household Budget Level: ${budgetLevel}
+- Max Prep Time Per Meal: ${maxPrepTime}
+- Variety Level (1-5): ${varietyLevel}
+- Enable Bulk/Batch Prep: ${enableBulkPrep ? 'Yes' : 'No'}
+- Previously Used Recipes (Avoid Duplicates): ${recipeHistory.join(', ') || 'None'}
+
+### WEEKLY SCHEDULE MATRIX
+${JSON.stringify(weeklySchedule, null, 2)}
+
+### OUTPUT REQUIREMENTS (JSON)
+Return a valid JSON object matching this structure:
+{
+  "weeklyCalendar": [
+    {
+      "day": "MON",
+      "meals": [
+        {
+          "type": "Lunch",
+          "name": "Recipe Name",
+          "calories": 650,
+          "protein": 45,
+          "carbs": 50,
+          "fat": 20,
+          "ingredients": ["1 lb Ground Turkey", "2 cups Brown Rice"],
+          "instructions": ["Step 1...", "Step 2..."]
+        }
+      ]
+    }
+  ],
+  "groceries": [
+    {
+      "category": "Proteins",
+      "item": "Ground Turkey",
+      "amount": "3 lbs"
+    }
+  ],
+  "estimatedGroceryCost": "$150 – $200 USD"
+}
+`;
+
+    /* 
+      3. Call your AI Provider (OpenAI, Anthropic, Gemini, etc.)
+      Example with OpenAI:
+      
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
         ],
-        "weeklyCalendar": [
-          {
-            "day": "MON",
-            "meals": [
-              {
-                "type": "Lunch",
-                "name": "Grilled Lemon Herb Chicken & Jasmine Rice",
-                "calories": 650,
-                "protein": 50,
-                "carbs": 65,
-                "fat": 18,
-                "prepTime": "20 mins",
-                "ingredients": [
-                  "200g boneless skinless chicken breast",
-                  "1 cup cooked jasmine rice",
-                  "1 tbsp olive oil",
-                  "1 tbsp fresh lemon juice",
-                  "1 tsp garlic powder"
-                ],
-                "instructions": [
-                  "Whisk olive oil, lemon juice, and garlic powder together to make a marinade.",
-                  "Coat chicken breast in marinade and let rest for 5 minutes.",
-                  "Heat a skillet over medium-high heat and cook chicken for 6-8 minutes per side until internal temp reaches 165°F.",
-                  "Serve hot over warm jasmine rice."
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    `;
+        response_format: { type: 'json_object' }
+      });
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+      const responseData = JSON.parse(completion.choices[0].message.content || '{}');
+    */
 
-    const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedData = JSON.parse(cleanedText);
+    // Placeholder mock return for testing front-end integration
+    const mockData = {
+      weeklyCalendar: [
+        {
+          day: 'MON',
+          meals: [
+            {
+              type: 'Lunch',
+              name: 'Family-Size Shredded Chicken Rice Bowls',
+              calories: targetCalories ? Math.round(targetCalories * 0.35) : 650,
+              protein: targetProteinGrams ? Math.round(targetProteinGrams * 0.35) : 45,
+              carbs: 60,
+              fat: 18,
+              ingredients: [
+                `${householdSize * 0.5} lbs Chicken Breast`,
+                `${householdSize * 0.75} cups Jasmine Rice`,
+                'Steamed Broccoli',
+                'Low-Sodium Soy Sauce',
+              ],
+              instructions: [
+                'Pressure cook or boil chicken until shreddable.',
+                'Cook jasmine rice according to package directions.',
+                'Assemble into bowls scaled for family portion sizes.',
+              ],
+            },
+          ],
+        },
+      ],
+      groceries: [
+        { category: 'Proteins', item: 'Chicken Breast', amount: `${householdSize * 3} lbs` },
+        { category: 'Grains & Carbs', item: 'Jasmine Rice', amount: '2 bags' },
+        { category: 'Produce', item: 'Broccoli Heads', amount: '4 heads' },
+      ],
+      estimatedGroceryCost: `$${householdSize * 40} – $${householdSize * 65} USD`,
+    };
 
-    return NextResponse.json(parsedData);
-
+    return NextResponse.json(mockData);
   } catch (error: any) {
-    console.error('Error generating meal plan:', error);
+    console.error('Error in generate-plan route:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to generate meal plan' },
+      { error: error.message || 'Internal Server Error' },
       { status: 500 }
     );
   }

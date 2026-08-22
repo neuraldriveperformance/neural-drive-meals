@@ -7,11 +7,23 @@ import GroceryList, { GroceryCategory } from './Components/GroceryList';
 const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 
+interface FamilyMember {
+  id: string;
+  name: string;
+  calories: number | '';
+  protein: number | '';
+  exclusions: string[];
+}
+
 export default function Home() {
   const [clientName, setClientName] = useState('');
-  const [dailyCalories, setDailyCalories] = useState<number | ''>('');
-  const [proteinTarget, setProteinTarget] = useState<number | ''>('');
-  const [householdSize, setHouseholdSize] = useState(1);
+  
+  // Family configuration state
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([
+    { id: '1', name: 'Primary Client', calories: '', protein: '', exclusions: [] }
+  ]);
+  const [memberExclusionInputs, setMemberExclusionInputs] = useState<{ [key: string]: string }>({});
+
   const [budget, setBudget] = useState('moderate');
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
   const [variety, setVariety] = useState(3);
@@ -19,9 +31,6 @@ export default function Home() {
   const [bulkPrep, setBulkPrep] = useState(false);
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  const [exclusions, setExclusions] = useState<string[]>([]);
-  const [exclusionInput, setExclusionInput] = useState('');
 
   const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
@@ -50,6 +59,56 @@ export default function Home() {
     }
   }, []);
 
+  // Family Member Handlers
+  const addFamilyMember = () => {
+    const newId = Date.now().toString();
+    setFamilyMembers((prev) => [
+      ...prev,
+      { id: newId, name: `Family Member ${prev.length + 1}`, calories: '', protein: '', exclusions: [] }
+    ]);
+  };
+
+  const removeFamilyMember = (id: string) => {
+    if (familyMembers.length === 1) {
+      alert('You must keep at least one profile.');
+      return;
+    }
+    setFamilyMembers((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  const updateFamilyMember = (id: string, field: keyof FamilyMember, value: any) => {
+    setFamilyMembers((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, [field]: value } : m))
+    );
+  };
+
+  const addMemberExclusion = (id: string) => {
+    const inputVal = (memberExclusionInputs[id] || '').trim();
+    if (!inputVal) return;
+
+    setFamilyMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === id && !m.exclusions.includes(inputVal)) {
+          return { ...m, exclusions: [...m.exclusions, inputVal] };
+        }
+        return m;
+      })
+    );
+
+    setMemberExclusionInputs((prev) => ({ ...prev, [id]: '' }));
+  };
+
+  const removeMemberExclusion = (id: string, item: string) => {
+    setFamilyMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === id) {
+          return { ...m, exclusions: m.exclusions.filter((e) => e !== item) };
+        }
+        return m;
+      })
+    );
+  };
+
   const cycleMealSlot = (day: string, slot: string) => {
     setSchedule((prev) => {
       const currentStatus = prev[day]?.[slot] || 'off';
@@ -64,17 +123,6 @@ export default function Home() {
         [day]: { ...(prev[day] || {}), [slot]: nextStatus },
       };
     });
-  };
-
-  const addExclusion = () => {
-    if (exclusionInput.trim() && !exclusions.includes(exclusionInput.trim())) {
-      setExclusions([...exclusions, exclusionInput.trim()]);
-      setExclusionInput('');
-    }
-  };
-
-  const removeExclusion = (item: string) => {
-    setExclusions(exclusions.filter((e) => e !== item));
   };
 
   const updateGroceryMatrix = (calendarData: any[]) => {
@@ -144,16 +192,32 @@ export default function Home() {
 
     setLoading(true);
 
+    // Collect all unique exclusions across family members
+    const allExclusions = Array.from(
+      new Set(familyMembers.flatMap((m) => m.exclusions))
+    );
+
+    // Aggregate nutritional goals for the whole household
+    const totalCalories = familyMembers.reduce(
+      (sum, m) => sum + (typeof m.calories === 'number' ? m.calories : 0),
+      0
+    );
+    const totalProtein = familyMembers.reduce(
+      (sum, m) => sum + (typeof m.protein === 'number' ? m.protein : 0),
+      0
+    );
+
     try {
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: clientName,
-          targetCalories: dailyCalories,
-          targetProteinGrams: proteinTarget,
-          exclusions,
-          householdSize,
+          name: clientName || 'Family Plan',
+          familyMembers,
+          householdSize: familyMembers.length,
+          targetCalories: totalCalories || undefined,
+          targetProteinGrams: totalProtein || undefined,
+          exclusions: allExclusions,
           budgetLevel: budget,
           weeklySchedule: schedule,
           varietyLevel: variety,
@@ -173,7 +237,7 @@ export default function Home() {
 
       const generatedCalendar = data.weeklyCalendar || [];
       setWeeklyCalendar(generatedCalendar);
-      setEstimatedCost(data.estimatedGroceryCost || `$75 – $115 USD`);
+      setEstimatedCost(data.estimatedGroceryCost || `$120 – $220 USD`);
 
       const newRecipeNames: string[] = [];
       generatedCalendar.forEach((dayObj: any) => {
@@ -222,7 +286,7 @@ export default function Home() {
       }, 100);
     } catch (err: any) {
       alert(`Error: ${err.message}`);
-    } finally {
+    } fontFinally: {
       setLoading(false);
     }
   };
@@ -236,15 +300,20 @@ export default function Home() {
         });
       });
 
+      const allExclusions = Array.from(new Set(familyMembers.flatMap((m) => m.exclusions)));
+      const totalCalories = familyMembers.reduce((sum, m) => sum + (typeof m.calories === 'number' ? m.calories : 0), 0);
+      const totalProtein = familyMembers.reduce((sum, m) => sum + (typeof m.protein === 'number' ? m.protein : 0), 0);
+
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: clientName,
-          targetCalories: dailyCalories,
-          targetProteinGrams: proteinTarget,
-          exclusions,
-          householdSize,
+          name: clientName || 'Family Plan',
+          familyMembers,
+          householdSize: familyMembers.length,
+          targetCalories: totalCalories || undefined,
+          targetProteinGrams: totalProtein || undefined,
+          exclusions: allExclusions,
           budgetLevel: budget,
           weeklySchedule: { MON: { [mealType]: 'generate' } },
           varietyLevel: 5,
@@ -295,76 +364,179 @@ export default function Home() {
                 NEURAL DRIVE PERFORMANCE
               </h1>
               <p className="text-xs md:text-sm text-gray-400">
-                Precision Nutrition & Meal Planning Architecture
+                Precision Family Nutrition & Meal Planning Architecture
               </p>
             </div>
           </div>
         </header>
 
         <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[#00F2FE]">
-            Client Profile Configuration
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#00F2FE]">
+              Family & Client Profile Configuration
+            </h2>
+            <span className="text-xs text-gray-400 bg-[#162032] px-3 py-1 rounded-full border border-[#1E2D4A]">
+              Total Household Size: <strong className="text-[#00F2FE]">{familyMembers.length}</strong>
+            </span>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-                Client Name
+                Account / Family Name
               </label>
               <input
                 type="text"
-                placeholder="e.g. John Doe"
+                placeholder="e.g. The Miller Family"
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-                Daily Target Calories
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 2450"
-                value={dailyCalories}
-                onChange={(e) => setDailyCalories(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
-              />
+          {/* FAMILY MEMBERS SECTION */}
+          <div className="space-y-4 pt-2 border-t border-[#1E2D4A]">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wide">
+                Family Member Profiles & Targets
+              </h3>
+              <button
+                type="button"
+                onClick={addFamilyMember}
+                className="bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-[#00F2FE] font-bold px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1"
+              >
+                + Add Family Member
+              </button>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-                Daily Protein Target (Grams)
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 160"
-                value={proteinTarget}
-                onChange={(e) => setProteinTarget(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
-              />
+            <div className="space-y-4">
+              {familyMembers.map((member, index) => (
+                <div
+                  key={member.id}
+                  className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-4 space-y-4 relative"
+                >
+                  <div className="flex items-center justify-between gap-4 border-b border-[#1E2D4A] pb-3">
+                    <span className="text-xs font-extrabold text-[#00F2FE] uppercase">
+                      Member #{index + 1}
+                    </span>
+                    {familyMembers.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeFamilyMember(member.id)}
+                        className="text-gray-500 hover:text-red-400 text-xs font-bold transition"
+                      >
+                        Remove Member
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        Name / Identifier
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. John, Sarah, Toddler"
+                        value={member.name}
+                        onChange={(e) => updateFamilyMember(member.id, 'name', e.target.value)}
+                        className="w-full bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        Daily Target Calories
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 2200"
+                        value={member.calories}
+                        onChange={(e) =>
+                          updateFamilyMember(
+                            member.id,
+                            'calories',
+                            e.target.value === '' ? '' : Number(e.target.value)
+                          )
+                        }
+                        className="w-full bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        Daily Protein Target (g)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 150"
+                        value={member.protein}
+                        onChange={(e) =>
+                          updateFamilyMember(
+                            member.id,
+                            'protein',
+                            e.target.value === '' ? '' : Number(e.target.value)
+                          )
+                        }
+                        className="w-full bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FE]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                      Member Dietary Exclusions / Allergies
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. Dairy, Peanut, Gluten"
+                        value={memberExclusionInputs[member.id] || ''}
+                        onChange={(e) =>
+                          setMemberExclusionInputs({ ...memberExclusionInputs, [member.id]: e.target.value })
+                        }
+                        onKeyDown={(e) => e.key === 'Enter' && addMemberExclusion(member.id)}
+                        className="flex-1 bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addMemberExclusion(member.id)}
+                        className="bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {member.exclusions.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {member.exclusions.map((item) => (
+                          <span
+                            key={item}
+                            className="bg-[#0F1724] border border-[#00F2FE]/40 text-[#00F2FE] text-[11px] px-2.5 py-0.5 rounded-full flex items-center gap-1.5"
+                          >
+                            {item}
+                            <button
+                              type="button"
+                              onClick={() => removeMemberExclusion(member.id, item)}
+                              className="hover:text-red-400 font-bold"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-[#1E2D4A]">
             <div>
               <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-                Household Multiplier (People)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={householdSize}
-                onChange={(e) => setHouseholdSize(Number(e.target.value))}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00F2FE]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-                Budget Tier
+                Household Budget Tier
               </label>
               <select
                 value={budget}
@@ -376,7 +548,7 @@ export default function Home() {
                 <option value="premium">Premium / Organic Focus</option>
               </select>
               <span className="text-[10px] text-gray-500 mt-1 block">
-                *Estimated costs vary based on geographic location and retailer pricing.
+                *Estimated family costs vary based on region and market conditions.
               </span>
             </div>
 
@@ -401,50 +573,9 @@ export default function Home() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">
-              Dietary Exclusions / Allergies
-            </label>
-            <div className="flex gap-2 mb-3">
-              <input
-                type="text"
-                placeholder="e.g. Dairy, Shellfish, Eggs"
-                value={exclusionInput}
-                onChange={(e) => setExclusionInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
-                className="flex-1 bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-[#00F2FE]"
-              />
-              <button
-                type="button"
-                onClick={addExclusion}
-                className="bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black font-bold px-5 py-2 rounded-lg text-sm transition"
-              >
-                Add
-              </button>
-            </div>
-            {exclusions.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {exclusions.map((item) => (
-                  <span
-                    key={item}
-                    className="bg-[#162032] border border-[#00F2FE]/40 text-[#00F2FE] text-xs px-3 py-1 rounded-full flex items-center gap-2"
-                  >
-                    {item}
-                    <button
-                      onClick={() => removeExclusion(item)}
-                      className="hover:text-red-400 font-bold"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
             <div className="flex items-center justify-between mb-3">
               <label className="text-[11px] font-bold text-gray-400 uppercase">
-                Weekly Meal Schedule Matrix
+                Weekly Family Meal Schedule Matrix
               </label>
               <div className="flex gap-3 text-[10px] font-semibold">
                 <span className="text-[#00F2FE]">● Generate</span>
@@ -537,11 +668,11 @@ export default function Home() {
                 htmlFor="bulkPrep"
                 className={variety === 5 ? 'cursor-not-allowed' : 'cursor-pointer'}
               >
-                <div className="text-xs font-bold text-white">Bulk Batch Prep</div>
+                <div className="text-xs font-bold text-white">Family Bulk Batch Prep</div>
                 <div className="text-[10px] text-gray-400">
                   {variety === 5
                     ? 'Disabled at Level 5 Variety (requires 100% unique meals)'
-                    : 'Repeat batch cooked meals across days'}
+                    : 'Scale up batch-cooked meals for easier family preparation'}
                 </div>
               </label>
             </div>
@@ -569,7 +700,7 @@ export default function Home() {
                 : 'bg-[#00F2FE] hover:bg-[#00c8d4] text-black shadow-lg shadow-[#00F2FE]/20'
             }`}
           >
-            {loading ? 'GENERATING NEURAL MEAL PLAN...' : '🚀 GENERATE CUSTOM MEAL PLAN'}
+            {loading ? 'GENERATING FAMILY MEAL PLAN...' : '🚀 GENERATE CUSTOM FAMILY MEAL PLAN'}
           </button>
         </div>
 
@@ -577,12 +708,12 @@ export default function Home() {
           {weeklyCalendar && weeklyCalendar.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wider">
-                1. Weekly Calendar Protocol
+                1. Weekly Family Calendar Protocol
               </h2>
-              <MealPlanCalendar 
-                calendarDays={weeklyCalendar} 
-                onSwapMeal={handleSwapMeal} 
-                onSelectMeal={(meal: any) => setSelectedMeal(meal)} 
+              <MealPlanCalendar
+                calendarDays={weeklyCalendar}
+                onSwapMeal={handleSwapMeal}
+                onSelectMeal={(meal: any) => setSelectedMeal(meal)}
               />
             </div>
           )}
@@ -590,7 +721,7 @@ export default function Home() {
           {groceries && groceries.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wider">
-                2. Consolidated Grocery Matrix
+                2. Consolidated Family Grocery Matrix
               </h2>
               <GroceryList categories={groceries} estimatedCost={estimatedCost} />
             </div>
