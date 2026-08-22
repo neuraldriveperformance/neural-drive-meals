@@ -47,6 +47,8 @@ export async function POST(req: Request) {
       - Single Meal Swap Request: ${isSwapRequest ? 'Yes' : 'No'}
       - Recipe History: ${JSON.stringify(recipeHistory || [])}
 
+      CRITICAL: For every meal item, provide detailed ingredients and clear step-by-step cooking instructions as string arrays.
+
       Return your output strictly as valid JSON matching this exact structure:
       {
         "estimatedGroceryCost": "$XX – $YY USD",
@@ -62,9 +64,15 @@ export async function POST(req: Request) {
                 "name": "Recipe Name",
                 "calories": 600,
                 "protein": 45,
+                "carbs": 50,
+                "fat": 15,
                 "prepTime": "20 mins",
-                "ingredients": ["1 cup rice", "200g chicken"],
-                "instructions": "Step-by-step prep..."
+                "ingredients": ["1 cup cooked jasmine rice", "200g grilled chicken breast", "1 tbsp olive oil"],
+                "instructions": [
+                  "Heat olive oil in a skillet over medium-high heat.",
+                  "Season chicken breast and cook for 6-8 minutes per side.",
+                  "Serve over warm jasmine rice."
+                ]
               }
             ]
           }
@@ -76,7 +84,6 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
 
-    // Clean JSON formatting if markdown backticks are present
     const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsedData = JSON.parse(cleanedText);
 

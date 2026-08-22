@@ -5,7 +5,6 @@ import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryList, { GroceryCategory } from './Components/GroceryList';
 
 export default function Home() {
-  // CLIENT PROFILE INPUTS - START BLANK BY DEFAULT
   const [clientName, setClientName] = useState('');
   const [dailyCalories, setDailyCalories] = useState<number | ''>('');
   const [proteinTarget, setProteinTarget] = useState<number | ''>('');
@@ -14,14 +13,12 @@ export default function Home() {
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
   const [variety, setVariety] = useState(3);
   
-  // CHECKBOXES START UNCHECKED BY DEFAULT
   const [bulkPrep, setBulkPrep] = useState(false);
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
   
   const [exclusions, setExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
-  // WEEKLY MATRIX INITIALIZED: LUNCH AND DINNER DEFAULT FOR MON-FRI ONLY
   const [schedule, setSchedule] = useState<{ [day: string]: string[] }>({
     MON: ['Lunch', 'Dinner'],
     TUE: ['Lunch', 'Dinner'],
@@ -36,12 +33,12 @@ export default function Home() {
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
   const [groceries, setGroceries] = useState<GroceryCategory[] | null>(null);
   const [estimatedCost, setEstimatedCost] = useState<string>('');
-
-  // RECIPE HISTORY TRACKING TO ENSURE UNIQUE MEALS ACROSS EXTENDED GENERATIONS
   const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
 
+  // STATE FOR RECIPE MODAL POPUP
+  const [selectedMeal, setSelectedMeal] = useState<any | null>(null);
+
   useEffect(() => {
-    // Load historical recipe names from localStorage on initial mount
     try {
       const storedHistory = localStorage.getItem('ndp_recipe_history');
       if (storedHistory) {
@@ -76,7 +73,6 @@ export default function Home() {
     setExclusions(exclusions.filter((e) => e !== item));
   };
 
-  // RECALCULATE GROCERIES ON THE FLY WHEN A MEAL IS SWAPPED
   const updateGroceryMatrix = (calendarData: any[]) => {
     const rawGroceryMap: { [itemName: string]: number } = {};
 
@@ -227,7 +223,6 @@ export default function Home() {
     }
   };
 
-  // SWAP SPECIFIC RECIPE ACROSS ALL CALENDAR DAYS
   const handleSwapMeal = async (oldMealName: string, mealType: string) => {
     try {
       const activeRecipeNames: string[] = [];
@@ -569,7 +564,11 @@ export default function Home() {
               <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wider">
                 1. Weekly Calendar Protocol
               </h2>
-              <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
+              <MealPlanCalendar 
+                calendarDays={weeklyCalendar} 
+                onSwapMeal={handleSwapMeal} 
+                onSelectMeal={(meal: any) => setSelectedMeal(meal)} 
+              />
             </div>
           )}
 
@@ -583,6 +582,74 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* RECIPE DETAILS MODAL OVERLAY */}
+      {selectedMeal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-[#0F1724] border border-[#00F2FE]/40 rounded-2xl p-6 max-w-xl w-full max-h-[85vh] overflow-y-auto relative text-white shadow-2xl">
+            <button
+              onClick={() => setSelectedMeal(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-[#00F2FE] font-black text-xl transition"
+            >
+              ✕
+            </button>
+
+            <span className="text-xs font-black uppercase text-[#00F2FE] tracking-widest">
+              {selectedMeal.type || 'Meal Protocol'}
+            </span>
+            <h3 className="text-2xl font-black mt-1 text-white">{selectedMeal.name}</h3>
+
+            <div className="grid grid-cols-4 gap-2 my-4 p-3 bg-[#162032] border border-[#1E2D4A] rounded-xl text-center text-xs">
+              <div>
+                <p className="text-gray-400 text-[10px] uppercase">Calories</p>
+                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.calories || '—'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-[10px] uppercase">Protein</p>
+                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.protein ? `${selectedMeal.protein}g` : '—'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-[10px] uppercase">Carbs</p>
+                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.carbs ? `${selectedMeal.carbs}g` : '—'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-[10px] uppercase">Fat</p>
+                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.fat ? `${selectedMeal.fat}g` : '—'}</p>
+              </div>
+            </div>
+
+            <div className="mb-6 space-y-2">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-[#00F2FE]">
+                Ingredients
+              </h4>
+              <ul className="list-disc list-inside space-y-1 text-xs text-gray-300">
+                {Array.isArray(selectedMeal.ingredients) ? (
+                  selectedMeal.ingredients.map((ing: string, i: number) => (
+                    <li key={i}>{ing}</li>
+                  ))
+                ) : (
+                  <li>{selectedMeal.ingredients || 'No ingredients listed.'}</li>
+                )}
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-[#00F2FE]">
+                Preparation & Cooking Instructions
+              </h4>
+              {Array.isArray(selectedMeal.instructions) ? (
+                <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
+                  {selectedMeal.instructions.map((step: string, i: number) => (
+                    <li key={i} className="leading-relaxed">{step}</li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-xs text-gray-300 leading-relaxed">{selectedMeal.instructions || 'No preparation steps provided.'}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
