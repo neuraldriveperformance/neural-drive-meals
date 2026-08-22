@@ -12,6 +12,7 @@ export interface Meal {
   prepTime?: string;
   ingredients: string[];
   instructions: string[];
+  familyFriendlyNote?: string;
 }
 
 export interface DayPlan {
@@ -21,7 +22,7 @@ export interface DayPlan {
 
 interface MealPlanCalendarProps {
   calendarDays: DayPlan[];
-  onSwapMeal?: (mealName: string, mealType: string) => Promise<void> | void;
+  onSwapMeal?: (day: string, mealType: string) => Promise<void> | void;
   onSelectMeal?: (meal: Meal) => void;
 }
 
@@ -39,7 +40,7 @@ export default function MealPlanCalendar({
   onSelectMeal,
 }: MealPlanCalendarProps) {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
-  const [swappingMealName, setSwappingMealName] = useState<string | null>(null);
+  const [swappingMealId, setSwappingMealId] = useState<string | null>(null);
 
   if (!calendarDays || calendarDays.length === 0) {
     return (
@@ -105,13 +106,13 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
     printWindow.print();
   };
 
-  const handleSwapClick = async (meal: Meal) => {
+  const handleSwapClick = async (day: string, type: string, mealId: string) => {
     if (!onSwapMeal) return;
-    setSwappingMealName(meal.name);
+    setSwappingMealId(mealId);
     try {
-      await onSwapMeal(meal.name, meal.type);
+      await onSwapMeal(day, type);
     } finally {
-      setSwappingMealName(null);
+      setSwappingMealId(null);
     }
   };
 
@@ -147,9 +148,9 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                 </div>
               ) : (
                 sortedMeals.map((meal, mIdx) => {
-                  const mealId = `${dayPlan.day}-${mIdx}`;
+                  const mealId = `${dayPlan.day}-${meal.type}-${mIdx}`;
                   const isExpanded = expandedMeal === mealId;
-                  const isSwapping = swappingMealName === meal.name;
+                  const isSwapping = swappingMealId === mealId;
 
                   return (
                     <div
@@ -190,6 +191,7 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
 
                       {/* TOGGLE RECIPE DROPDOWN */}
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleExpand(mealId);
@@ -230,12 +232,14 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                           {/* ACTION BUTTON MATRIX */}
                           <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[#1E2D4A]/50">
                             <button
+                              type="button"
                               onClick={() => handlePrintRecipe(meal)}
                               className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
                             >
                               🖨️ Print
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleShareRecipe(meal)}
                               className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
                             >
@@ -243,7 +247,8 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                             </button>
                             {onSwapMeal && (
                               <button
-                                onClick={() => handleSwapClick(meal)}
+                                type="button"
+                                onClick={() => handleSwapClick(dayPlan.day, meal.type, mealId)}
                                 disabled={isSwapping}
                                 className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center ${
                                   isSwapping ? 'opacity-50 cursor-not-allowed' : ''

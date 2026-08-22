@@ -228,21 +228,26 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Failed to swap meal');
 
       if (data.swappedMeal && weeklyCalendar) {
+        // Deep map to create a fresh reference for React state tracking
         const updatedCalendar = weeklyCalendar.map((dayObj: any) => {
           if (dayObj.day === dayToSwap) {
-            const updatedMeals = dayObj.meals.map((meal: any) => {
-              if (meal.type === mealTypeToSwap) {
-                return data.swappedMeal;
-              }
-              return meal;
-            });
-            return { ...dayObj, meals: updatedMeals };
+            return {
+              ...dayObj,
+              meals: dayObj.meals.map((meal: any) => {
+                if (meal.type === mealTypeToSwap) {
+                  return { ...data.swappedMeal, type: mealTypeToSwap };
+                }
+                return meal;
+              }),
+            };
           }
           return dayObj;
         });
 
-        setWeeklyCalendar(updatedCalendar);
+        // Set state with new immutable array
+        setWeeklyCalendar([...updatedCalendar]);
 
+        // Save to recipe history
         if (data.swappedMeal.name) {
           const updatedHistory = Array.from(
             new Set([...recipeHistory, data.swappedMeal.name])
@@ -255,7 +260,6 @@ export default function Home() {
       alert(`Error swapping meal: ${err.message}`);
     }
   };
-
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
