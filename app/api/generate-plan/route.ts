@@ -18,11 +18,11 @@ export async function POST(req: Request) {
       maxPrepTime = 'no-limit',
       recipeHistory = [],
       isSwapRequest = false,
+      swapTarget,
     } = body;
 
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-    // Complete recipe catalog with explicitly detailed ingredients & sauce/glaze steps
     const lunchPool = [
       {
         name: 'Lean Beef & Rice Meal Prep Bowl',
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
       {
         name: 'Lean Beef Stir-Fry with Snap Peas & Noodles',
         calories: clientCalories ? Math.round(clientCalories * 0.4) : 740,
-        protein: clientProtein ? Math.round(clientCalories * 0.4) : 52,
+        protein: clientProtein ? Math.round(clientProtein * 0.4) : 52,
         carbs: 70,
         fat: 18,
         ingredients: [
@@ -169,7 +169,21 @@ export async function POST(req: Request) {
       },
     ];
 
-    // Build complete 7-day calendar dynamically based on weeklySchedule
+    // --- SWAP REQUEST HANDLER ---
+    if (isSwapRequest && swapTarget) {
+      const pool = swapTarget.type === 'Lunch' ? lunchPool : swapTarget.type === 'Dinner' ? dinnerPool : lunchPool;
+      
+      // Select a random meal from the pool
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      const swappedMeal = {
+        ...pool[randomIndex],
+        type: swapTarget.type,
+      };
+
+      return NextResponse.json({ swappedMeal });
+    }
+
+    // --- FULL PLAN GENERATION HANDLER ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
       const daySchedule = weeklySchedule[day] || {};
       const meals = [];
@@ -214,7 +228,6 @@ export async function POST(req: Request) {
       return { day, meals };
     });
 
-    // Mock consolidated grocery matrix scaled by totalPortionWeight
     const mockGroceries = [
       {
         category: 'Proteins',

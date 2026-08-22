@@ -200,6 +200,62 @@ export default function Home() {
     }
   };
 
+  const handleSwapMeal = async (dayToSwap: string, mealTypeToSwap: string) => {
+    try {
+      const response = await fetch('/api/generate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: clientName || 'Primary Client',
+          clientCalories: clientCalories || undefined,
+          clientProtein: clientProtein || undefined,
+          clientExclusions,
+          household,
+          totalPortionWeight,
+          budgetLevel: budget,
+          weeklySchedule: schedule,
+          varietyLevel: variety,
+          enableBulkPrep: bulkPrep,
+          maxPrepTime,
+          recipeHistory,
+          seed: `${Date.now()}-${Math.random()}`,
+          isSwapRequest: true,
+          swapTarget: { day: dayToSwap, type: mealTypeToSwap },
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to swap meal');
+
+      if (data.swappedMeal && weeklyCalendar) {
+        const updatedCalendar = weeklyCalendar.map((dayObj: any) => {
+          if (dayObj.day === dayToSwap) {
+            const updatedMeals = dayObj.meals.map((meal: any) => {
+              if (meal.type === mealTypeToSwap) {
+                return data.swappedMeal;
+              }
+              return meal;
+            });
+            return { ...dayObj, meals: updatedMeals };
+          }
+          return dayObj;
+        });
+
+        setWeeklyCalendar(updatedCalendar);
+
+        if (data.swappedMeal.name) {
+          const updatedHistory = Array.from(
+            new Set([...recipeHistory, data.swappedMeal.name])
+          ).slice(-60);
+          setRecipeHistory(updatedHistory);
+          localStorage.setItem('ndp_recipe_history', JSON.stringify(updatedHistory));
+        }
+      }
+    } catch (err: any) {
+      alert(`Error swapping meal: ${err.message}`);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -632,7 +688,7 @@ export default function Home() {
               </h2>
               <MealPlanCalendar
                 calendarDays={weeklyCalendar}
-                onSwapMeal={() => {}}
+                onSwapMeal={handleSwapMeal}
                 onSelectMeal={(meal: any) => setSelectedMeal(meal)}
               />
             </div>
