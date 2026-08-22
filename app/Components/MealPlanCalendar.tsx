@@ -22,6 +22,7 @@ export interface DayPlan {
 interface MealPlanCalendarProps {
   calendarDays: DayPlan[];
   onSwapMeal?: (mealName: string, mealType: string) => Promise<void> | void;
+  onSelectMeal?: (meal: Meal) => void;
 }
 
 const MEAL_ORDER: { [key: string]: number } = {
@@ -32,7 +33,11 @@ const MEAL_ORDER: { [key: string]: number } = {
   Snack: 4,
 };
 
-export default function MealPlanCalendar({ calendarDays, onSwapMeal }: MealPlanCalendarProps) {
+export default function MealPlanCalendar({
+  calendarDays,
+  onSwapMeal,
+  onSelectMeal,
+}: MealPlanCalendarProps) {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [swappingMealName, setSwappingMealName] = useState<string | null>(null);
 
@@ -149,7 +154,8 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                   return (
                     <div
                       key={mIdx}
-                      className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-2.5 space-y-2 text-xs"
+                      onClick={() => onSelectMeal && onSelectMeal(meal)}
+                      className="bg-[#162032] border border-[#1E2D4A] hover:border-[#00F2FE]/60 rounded-xl p-2.5 space-y-2 text-xs transition cursor-pointer"
                     >
                       <div className="flex justify-between items-center gap-1">
                         <span className="font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A]">
@@ -182,9 +188,12 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
                         </span>
                       </div>
 
-                      {/* TOGGLE RECIPE */}
+                      {/* TOGGLE RECIPE DROPDOWN */}
                       <button
-                        onClick={() => toggleExpand(mealId)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpand(mealId);
+                        }}
                         className="w-full mt-1 text-[9px] font-extrabold uppercase bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] py-1 rounded border border-[#1E2D4A] transition"
                       >
                         {isExpanded ? 'Hide ▲' : 'Recipe ▼'}
@@ -192,7 +201,10 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
 
                       {/* RECIPE DETAILS & ACTION BUTTON MATRIX */}
                       {isExpanded && (
-                        <div className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]">
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]"
+                        >
                           <div>
                             <strong className="text-[#00F2FE] block mb-0.5">
                               Ingredients:
