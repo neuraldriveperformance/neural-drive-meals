@@ -195,13 +195,30 @@ export default function Home() {
       }, 100);
     } catch (err: any) {
       alert(`Error: ${err.message}`);
-    } finally {
+    } flex {
       setLoading(false);
     }
   };
 
   const handleSwapMeal = async (dayToSwap: string, mealTypeToSwap: string) => {
     try {
+      // 1. Find target meal name
+      const targetDayPlan = weeklyCalendar?.find((d: any) => d.day === dayToSwap);
+      const targetMeal = targetDayPlan?.meals?.find((m: any) => m.type === mealTypeToSwap);
+      const oldMealName = targetMeal?.name;
+
+      // 2. Collect ALL currently assigned meals on calendar matrix
+      const currentCalendarMeals: string[] = [];
+      weeklyCalendar?.forEach((dayObj: any) => {
+        dayObj.meals?.forEach((m: any) => {
+          if (m?.name) currentCalendarMeals.push(m.name);
+        });
+      });
+
+      // Avoid recipes in local storage history and on current active calendar
+      const combinedExclusions = Array.from(new Set([...recipeHistory, ...currentCalendarMeals]));
+
+      // 3. Request single replacement recipe
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -217,7 +234,7 @@ export default function Home() {
           varietyLevel: variety,
           enableBulkPrep: bulkPrep,
           maxPrepTime,
-          recipeHistory,
+          recipeHistory: combinedExclusions,
           seed: `${Date.now()}-${Math.random()}`,
           isSwapRequest: true,
           swapTarget: { day: dayToSwap, type: mealTypeToSwap },
@@ -228,38 +245,42 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Failed to swap meal');
 
       if (data.swappedMeal && weeklyCalendar) {
-        // Deep map to create a fresh reference for React state tracking
+        const replacementMeal = data.swappedMeal;
+
+        // 4. Matrix Swap: Replace ALL instances matching target recipe name across all days
         const updatedCalendar = weeklyCalendar.map((dayObj: any) => {
-          if (dayObj.day === dayToSwap) {
-            return {
-              ...dayObj,
-              meals: dayObj.meals.map((meal: any) => {
-                if (meal.type === mealTypeToSwap) {
-                  return { ...data.swappedMeal, type: mealTypeToSwap };
-                }
-                return meal;
-              }),
-            };
-          }
-          return dayObj;
+          const updatedMeals = dayObj.meals.map((meal: any) => {
+            const matchesOldMeal = oldMealName && meal.name === oldMealName;
+            const isExactTargetSlot = dayObj.day === dayToSwap && meal.type === mealTypeToSwap;
+
+            if (matchesOldMeal || isExactTargetSlot) {
+              return {
+                ...replacementMeal,
+                type: meal.type,
+              };
+            }
+            return meal;
+          });
+
+          return { ...dayObj, meals: updatedMeals };
         });
 
-        // Set state with new immutable array
         setWeeklyCalendar([...updatedCalendar]);
 
-        // Save to recipe history
-        if (data.swappedMeal.name) {
+        // 5. Update history
+        if (replacementMeal.name) {
           const updatedHistory = Array.from(
-            new Set([...recipeHistory, data.swappedMeal.name])
+            new Set([...recipeHistory, replacementMeal.name])
           ).slice(-60);
           setRecipeHistory(updatedHistory);
           localStorage.setItem('ndp_recipe_history', JSON.stringify(updatedHistory));
         }
       }
     } catch (err: any) {
-      alert(`Error swapping meal: ${err.message}`);
+      alert(`Error swapping meal globally: ${err.message}`);
     }
   };
+
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -642,148 +663,62 @@ export default function Home() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Max Prep & Cook Time Per Meal</label>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Max Prep Time</label>
               <select
                 value={maxPrepTime}
                 onChange={(e) => setMaxPrepTime(e.target.value)}
                 className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
               >
+                <option value="no-limit">No Preference / Any Time</option>
                 <option value="15-mins">Under 15 Minutes</option>
                 <option value="30-mins">Under 30 Minutes</option>
                 <option value="45-mins">Under 45 Minutes</option>
-                <option value="60-mins">Under 60 Minutes</option>
-                <option value="no-limit">No Limit</option>
               </select>
             </div>
           </div>
 
-          <div className="bg-[#162032]/60 border border-[#1E2D4A] p-3 rounded-xl flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="disclaimer"
-              checked={disclaimerAgreed}
-              onChange={(e) => setDisclaimerAgreed(e.target.checked)}
-              className="w-4 h-4 accent-[#00F2FE] rounded cursor-pointer flex-shrink-0"
-            />
-            <label htmlFor="disclaimer" className="text-[11px] text-gray-400 leading-tight cursor-pointer">
-              <strong className="text-gray-300">IMPORTANT LEGAL DISCLAIMER:</strong> These meal plans and macro recommendations are for educational purposes only and do not substitute for professional medical or dietetic advice.
-            </label>
-          </div>
-
-          <button
-            onClick={handleGeneratePlan}
-            disabled={loading}
-            className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest transition flex items-center justify-center gap-2 ${
-              loading
-                ? 'bg-[#1E2D4A] text-gray-400 cursor-not-allowed'
-                : 'bg-[#00F2FE] hover:bg-[#00c8d4] text-black shadow-lg shadow-[#00F2FE]/20'
-            }`}
-          >
-            {loading ? 'GENERATING SCALED MEAL PLAN...' : '🚀 GENERATE CUSTOM CLIENT & HOUSEHOLD MEAL PLAN'}
-          </button>
-        </div>
-
-        {/* RESULTS SECTION */}
-        <div id="results-section" className="space-y-12">
-          {weeklyCalendar && weeklyCalendar.length > 0 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wider">
-                1. Weekly Client Calendar Protocol
-              </h2>
-              <MealPlanCalendar
-                calendarDays={weeklyCalendar}
-                onSwapMeal={handleSwapMeal}
-                onSelectMeal={(meal: any) => setSelectedMeal(meal)}
+          <div className="space-y-4 pt-4 border-t border-[#1E2D4A]">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="disclaimer"
+                checked={disclaimerAgreed}
+                onChange={(e) => setDisclaimerAgreed(e.target.checked)}
+                className="w-4 h-4 accent-[#00F2FE] bg-[#162032] border-[#1E2D4A] rounded cursor-pointer"
               />
+              <label htmlFor="disclaimer" className="text-xs text-gray-300 cursor-pointer">
+                I understand that NDP protocol recommendations are for informational performance purposes and do not replace professional medical guidance.
+              </label>
             </div>
-          )}
 
-          {groceries && groceries.length > 0 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wider">
-                2. Scaled Household Grocery Matrix
-              </h2>
-              <GroceryList categories={groceries} estimatedCost={estimatedCost} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* RECIPE DETAILS MODAL */}
-      {selectedMeal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-[#0F1724] border border-[#00F2FE]/40 rounded-2xl p-6 max-w-xl w-full max-h-[85vh] overflow-y-auto relative text-white shadow-2xl space-y-4">
             <button
-              onClick={() => setSelectedMeal(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-[#00F2FE] font-black text-xl transition"
+              type="button"
+              onClick={handleGeneratePlan}
+              disabled={loading}
+              className={`w-full py-4 rounded-xl font-black uppercase text-sm tracking-widest transition flex items-center justify-center gap-2 ${
+                loading
+                  ? 'bg-[#1E2D4A] text-gray-500 cursor-not-allowed'
+                  : 'bg-[#00F2FE] hover:bg-[#00c8d4] text-black shadow-lg shadow-[#00F2FE]/20'
+              }`}
             >
-              ✕
+              {loading ? 'GENERATE PROTOCOL MATRIX...' : '⚡ GENERATE MEAL PLAN PROTOCOL'}
             </button>
-
-            <div>
-              <span className="text-xs font-black uppercase text-[#00F2FE] tracking-widest">
-                {selectedMeal.type || 'Meal Protocol'}
-              </span>
-              <h3 className="text-2xl font-black mt-1 text-white">{selectedMeal.name}</h3>
-            </div>
-
-            {selectedMeal.familyFriendlyNote && (
-              <div className="bg-amber-500/10 border border-amber-500/40 p-3 rounded-xl flex items-start gap-2.5">
-                <span className="text-base">👨‍👩‍👧</span>
-                <div>
-                  <h5 className="text-[11px] font-extrabold uppercase text-amber-300">Family Deconstruction Tip</h5>
-                  <p className="text-xs text-amber-100/90 leading-snug">{selectedMeal.familyFriendlyNote}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-4 gap-2 p-3 bg-[#162032] border border-[#1E2D4A] rounded-xl text-center text-xs">
-              <div>
-                <p className="text-gray-400 text-[10px] uppercase">Calories</p>
-                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.calories || '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-[10px] uppercase">Protein</p>
-                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.protein ? `${selectedMeal.protein}g` : '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-[10px] uppercase">Carbs</p>
-                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.carbs ? `${selectedMeal.carbs}g` : '—'}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-[10px] uppercase">Fat</p>
-                <p className="font-extrabold text-[#00F2FE] text-sm">{selectedMeal.fat ? `${selectedMeal.fat}g` : '—'}</p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-[#00F2FE]">
-                Ingredients (Client 1-Adult Serving)
-              </h4>
-              <ul className="list-disc list-inside space-y-1 text-xs text-gray-300">
-                {Array.isArray(selectedMeal.ingredients) ? (
-                  selectedMeal.ingredients.map((ing: string, i: number) => <li key={i}>{ing}</li>)
-                ) : (
-                  <li>{selectedMeal.ingredients}</li>
-                )}
-              </ul>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-[#00F2FE]">Preparation Steps</h4>
-              {Array.isArray(selectedMeal.instructions) ? (
-                <ol className="list-decimal list-inside space-y-2 text-xs text-gray-300">
-                  {selectedMeal.instructions.map((step: string, i: number) => (
-                    <li key={i} className="leading-relaxed">{step}</li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="text-xs text-gray-300">{selectedMeal.instructions}</p>
-              )}
-            </div>
           </div>
         </div>
-      )}
+
+        {/* RESULTS MATRIX SECTION */}
+        {weeklyCalendar && (
+          <div id="results-section" className="space-y-8 pt-6">
+            <MealPlanCalendar
+              calendarDays={weeklyCalendar}
+              onSwapMeal={handleSwapMeal}
+              onSelectMeal={(meal) => setSelectedMeal(meal)}
+            />
+
+            <GroceryList categories={groceries} estimatedCost={estimatedCost} />
+          </div>
+        )}
+      </div>
     </main>
   );
 }
