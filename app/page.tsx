@@ -331,9 +331,19 @@ export default function Home() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
-                      Daily Calories
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">
+                        Daily Calories
+                      </label>
+                      <a
+                        href="https://tdeecalculator.net/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[9px] font-semibold text-[#00F2FE] hover:underline"
+                      >
+                        Calculate TDEE ↗
+                      </a>
+                    </div>
                     <input
                       type="number"
                       placeholder="e.g. 2400"
