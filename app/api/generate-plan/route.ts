@@ -5,12 +5,12 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     const {
-      name,
-      familyMembers = [],
-      householdSize = 1,
-      targetCalories,
-      targetProteinGrams,
-      exclusions = [],
+      clientName = 'Client',
+      clientCalories,
+      clientProtein,
+      clientExclusions = [],
+      household = { adults: 1, children: 0, familyDislikes: [] },
+      totalPortionWeight = 1.0,
       budgetLevel = 'moderate',
       weeklySchedule = {},
       varietyLevel = 3,
@@ -20,59 +20,56 @@ export async function POST(req: Request) {
       isSwapRequest = false,
     } = body;
 
-    // 1. Build Family Context Prompt
-    const familyDetailsPrompt = familyMembers.length > 0
-      ? familyMembers
-          .map(
-            (m: any, idx: number) =>
-              `- Member ${idx + 1} (${m.name || 'Unnamed'}): ${m.calories || 'N/A'} kcal, ${m.protein || 'N/A'}g protein. Specific Exclusions: ${m.exclusions?.join(', ') || 'None'}`
-          )
-          .join('\n')
-      : 'Single user profile';
-
-    // 2. Build Core System & User Prompts for LLM Generation
+    // Build LLM Prompt
     const systemPrompt = `You are an elite sports nutritionist and family meal planner for Neural Drive Performance.
-Your task is to generate a custom, highly tailored weekly meal plan and consolidated grocery list.
-Always output strict JSON with no markdown formatting surrounding the JSON response unless required.`;
+Always output strict JSON matching the required schema.
+
+CRITICAL INSTRUCTIONS FOR RECIPES AND GROCERIES:
+1. BASE RECIPES & MACROS: All individual meal object macros (calories, protein, carbs, fat) and base ingredient lists MUST be calculated for EXACTLY ONE (1) adult client serving.
+2. GROCERY MATRIX SCALING: When generating the "groceries" list, calculate total raw ingredients across the week. For any meal slot marked as 'shared: true', multiply ingredient amounts by totalPortionWeight (${totalPortionWeight}x). For meal slots marked as 'shared: false', use 1.0x.
+3. FAMILY FRIENDLY NOTES: For shared meals or meals containing spices/dislikes, provide a concise "familyFriendlyNote" detailing how to serve or deconstruct the meal for children or family members.`;
 
     const userPrompt = `
-Generate a ${isSwapRequest ? 'single replacement meal' : 'full weekly meal plan'} with the following specifications:
+Generate a ${isSwapRequest ? 'single replacement meal' : 'full weekly meal plan'} with these exact parameters:
 
-### FAMILY & HOUSEHOLD CONFIGURATION
-- Account Name: ${name}
-- Total Household Size: ${householdSize} person(s)
-- Total Household Daily Target Calories: ${targetCalories ? `${targetCalories} kcal` : 'Not specified'}
-- Total Household Daily Target Protein: ${targetProteinGrams ? `${targetProteinGrams}g` : 'Not specified'}
-- Individual Member Breakdown:
-${familyDetailsPrompt}
+CLIENT NUTRITION PROFILE (1 Adult Serving Base):
+- Client Name: ${clientName}
+- Target Daily Calories: ${clientCalories ? `${clientCalories} kcal` : 'Not specified'}
+- Target Daily Protein: ${clientProtein ? `${clientProtein}g` : 'Not specified'}
+- Client Exclusions: ${clientExclusions.length > 0 ? clientExclusions.join(', ') : 'None'}
 
-### DIETARY & PREFERENCE CONSTRAINTS
-- Strict Household Exclusions / Allergies: ${exclusions.length > 0 ? exclusions.join(', ') : 'None'}
-- Household Budget Level: ${budgetLevel}
-- Max Prep Time Per Meal: ${maxPrepTime}
-- Variety Level (1-5): ${varietyLevel}
+HOUSEHOLD & SCALING PROFILE:
+- Household Adults: ${household.adults}
+- Household Children: ${household.children}
+- Total Portion Yield Multiplier for Shared Meals: ${totalPortionWeight}x
+- Family Dislikes / Preferences: ${household.familyDislikes.length > 0 ? household.familyDislikes.join(', ') : 'None'}
+
+PREFERENCES:
+- Budget Tier: ${budgetLevel}
+- Max Prep Time: ${maxPrepTime}
+- Variety Level: ${varietyLevel}
 - Enable Bulk/Batch Prep: ${enableBulkPrep ? 'Yes' : 'No'}
-- Previously Used Recipes (Avoid Duplicates): ${recipeHistory.join(', ') || 'None'}
+- Avoid Duplicates: ${recipeHistory.join(', ') || 'None'}
 
-### WEEKLY SCHEDULE MATRIX
+WEEKLY SCHEDULE MATRIX (Includes status & shared flag):
 ${JSON.stringify(weeklySchedule, null, 2)}
 
-### OUTPUT REQUIREMENTS (JSON)
-Return a valid JSON object matching this structure:
+REQUIRED JSON OUTPUT FORMAT:
 {
   "weeklyCalendar": [
     {
       "day": "MON",
       "meals": [
         {
-          "type": "Lunch",
-          "name": "Recipe Name",
+          "type": "Dinner",
+          "name": "Pan-Seared Salmon with Jasmine Rice & Asparagus",
           "calories": 650,
-          "protein": 45,
-          "carbs": 50,
-          "fat": 20,
-          "ingredients": ["1 lb Ground Turkey", "2 cups Brown Rice"],
-          "instructions": ["Step 1...", "Step 2..."]
+          "protein": 48,
+          "carbs": 55,
+          "fat": 22,
+          "ingredients": ["6oz Salmon Fillet", "1 cup Cooked Jasmine Rice", "10 spears Asparagus"],
+          "instructions": ["Step 1...", "Step 2..."],
+          "familyFriendlyNote": "Keep garlic butter sauce on the side for kids and serve salmon plain."
         }
       ]
     }
@@ -80,18 +77,16 @@ Return a valid JSON object matching this structure:
   "groceries": [
     {
       "category": "Proteins",
-      "item": "Ground Turkey",
-      "amount": "3 lbs"
+      "item": "Salmon Fillet",
+      "amount": "${(6 * totalPortionWeight).toFixed(1)} oz per shared dinner"
     }
   ],
-  "estimatedGroceryCost": "$150 – $200 USD"
+  "estimatedGroceryCost": "$140 – $190 USD"
 }
 `;
 
     /* 
-      3. Call your AI Provider (OpenAI, Anthropic, Gemini, etc.)
-      Example with OpenAI:
-      
+      Example OpenAI API call:
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
@@ -100,52 +95,47 @@ Return a valid JSON object matching this structure:
         ],
         response_format: { type: 'json_object' }
       });
-
       const responseData = JSON.parse(completion.choices[0].message.content || '{}');
     */
 
-    // Placeholder mock return for testing front-end integration
+    // Placeholder mock return for immediate front-end testing
     const mockData = {
       weeklyCalendar: [
         {
           day: 'MON',
           meals: [
             {
-              type: 'Lunch',
-              name: 'Family-Size Shredded Chicken Rice Bowls',
-              calories: targetCalories ? Math.round(targetCalories * 0.35) : 650,
-              protein: targetProteinGrams ? Math.round(targetProteinGrams * 0.35) : 45,
-              carbs: 60,
+              type: 'Dinner',
+              name: 'Family-Style Honey Garlic Chicken & Rice',
+              calories: clientCalories ? Math.round(clientCalories * 0.35) : 680,
+              protein: clientProtein ? Math.round(clientProtein * 0.35) : 50,
+              carbs: 65,
               fat: 18,
-              ingredients: [
-                `${householdSize * 0.5} lbs Chicken Breast`,
-                `${householdSize * 0.75} cups Jasmine Rice`,
-                'Steamed Broccoli',
-                'Low-Sodium Soy Sauce',
-              ],
+              ingredients: ['6oz Chicken Breast', '1 cup Jasmine Rice', '1 cup Steamed Broccoli'],
               instructions: [
-                'Pressure cook or boil chicken until shreddable.',
-                'Cook jasmine rice according to package directions.',
-                'Assemble into bowls scaled for family portion sizes.',
+                'Cook chicken in pan with garlic honey glaze.',
+                'Serve over jasmine rice with steamed broccoli on the side.',
               ],
+              familyFriendlyNote: 'Deconstruct for children: serve chicken plain without honey garlic glaze on top.',
             },
           ],
         },
       ],
       groceries: [
-        { category: 'Proteins', item: 'Chicken Breast', amount: `${householdSize * 3} lbs` },
-        { category: 'Grains & Carbs', item: 'Jasmine Rice', amount: '2 bags' },
-        { category: 'Produce', item: 'Broccoli Heads', amount: '4 heads' },
+        {
+          category: 'Proteins',
+          item: 'Chicken Breast',
+          amount: `${(0.375 * totalPortionWeight).toFixed(1)} lbs`,
+        },
+        { category: 'Grains & Carbs', item: 'Jasmine Rice', amount: '1 Bag' },
+        { category: 'Produce', item: 'Broccoli', amount: '2 Crowns' },
       ],
-      estimatedGroceryCost: `$${householdSize * 40} – $${householdSize * 65} USD`,
+      estimatedGroceryCost: `$${Math.round(40 * totalPortionWeight)} – $${Math.round(65 * totalPortionWeight)} USD`,
     };
 
     return NextResponse.json(mockData);
   } catch (error: any) {
-    console.error('Error in generate-plan route:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
-    );
+    console.error('Error generating plan:', error);
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
