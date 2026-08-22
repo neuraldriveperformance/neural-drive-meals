@@ -20,117 +20,138 @@ export async function POST(req: Request) {
       isSwapRequest = false,
     } = body;
 
-    // Build LLM Prompt
-    const systemPrompt = `You are an elite sports nutritionist and family meal planner for Neural Drive Performance.
-Always output strict JSON matching the required schema.
+    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-CRITICAL INSTRUCTIONS FOR RECIPES AND GROCERIES:
-1. BASE RECIPES & MACROS: All individual meal object macros (calories, protein, carbs, fat) and base ingredient lists MUST be calculated for EXACTLY ONE (1) adult client serving.
-2. GROCERY MATRIX SCALING: When generating the "groceries" list, calculate total raw ingredients across the week. For any meal slot marked as 'shared: true', multiply ingredient amounts by totalPortionWeight (${totalPortionWeight}x). For meal slots marked as 'shared: false', use 1.0x.
-3. FAMILY FRIENDLY NOTES: For shared meals or meals containing spices/dislikes, provide a concise "familyFriendlyNote" detailing how to serve or deconstruct the meal for children or family members.`;
+    // Sample mock recipe catalog for fallback plan generation
+    const lunchPool = [
+      {
+        name: 'Lean Beef & Rice Meal Prep Bowl',
+        calories: clientCalories ? Math.round(clientCalories * 0.35) : 650,
+        protein: clientProtein ? Math.round(clientProtein * 0.35) : 48,
+        carbs: 55,
+        fat: 16,
+        ingredients: ['6oz 93/7 Ground Beef', '1 cup Brown Rice', '1 cup Roasted Peppers'],
+        instructions: ['Brown beef in skillet.', 'Combine with cooked brown rice and veggies.'],
+        familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
+      },
+      {
+        name: 'Grilled Chicken & Quinoa Harvest Salad',
+        calories: clientCalories ? Math.round(clientCalories * 0.35) : 620,
+        protein: clientProtein ? Math.round(clientProtein * 0.35) : 52,
+        carbs: 45,
+        fat: 18,
+        ingredients: ['6oz Chicken Breast', '1 cup Quinoa', 'Mixed Greens', '2 tbsp Vinaigrette'],
+        instructions: ['Grill chicken breasts.', 'Slice and serve over bed of dressed greens and quinoa.'],
+        familyFriendlyNote: 'Keep dressing on the side for children.',
+      },
+      {
+        name: 'Turkey Burrito Bowl with Black Beans',
+        calories: clientCalories ? Math.round(clientCalories * 0.35) : 640,
+        protein: clientProtein ? Math.round(clientProtein * 0.35) : 45,
+        carbs: 60,
+        fat: 15,
+        ingredients: ['6oz Lean Ground Turkey', '1/2 cup Black Beans', '1 cup White Rice', 'Salsa'],
+        instructions: ['Cook turkey with mild cumin and garlic.', 'Layer over rice and beans.'],
+        familyFriendlyNote: 'Keep spicy salsa separate for kids.',
+      },
+    ];
 
-    const userPrompt = `
-Generate a ${isSwapRequest ? 'single replacement meal' : 'full weekly meal plan'} with these exact parameters:
+    const dinnerPool = [
+      {
+        name: 'Pan-Seared Honey Garlic Chicken & Rice',
+        calories: clientCalories ? Math.round(clientCalories * 0.4) : 720,
+        protein: clientProtein ? Math.round(clientProtein * 0.4) : 55,
+        carbs: 65,
+        fat: 18,
+        ingredients: ['7oz Chicken Breast', '1.25 cups Jasmine Rice', '1 cup Steamed Broccoli'],
+        instructions: ['Pan sear chicken with honey-garlic glaze.', 'Serve alongside jasmine rice and broccoli.'],
+        familyFriendlyNote: 'Deconstruct for children: serve chicken plain without extra glaze.',
+      },
+      {
+        name: 'Sheet Pan Wild Salmon & Roasted Sweet Potatoes',
+        calories: clientCalories ? Math.round(clientCalories * 0.4) : 700,
+        protein: clientProtein ? Math.round(clientProtein * 0.4) : 50,
+        carbs: 50,
+        fat: 24,
+        ingredients: ['6oz Salmon Fillet', '1.5 cups Roasted Sweet Potato Cubes', '10 Asparagus Spears'],
+        instructions: ['Bake salmon and cubed sweet potatoes at 400°F for 18 mins.'],
+        familyFriendlyNote: 'Flake salmon into bite-size pieces for younger family members.',
+      },
+      {
+        name: 'Lean Beef Stir-Fry with Snap Peas & Noodles',
+        calories: clientCalories ? Math.round(clientCalories * 0.4) : 740,
+        protein: clientProtein ? Math.round(clientProtein * 0.4) : 52,
+        carbs: 70,
+        fat: 18,
+        ingredients: ['6oz Sirloin Steak Strips', '2 cups Udon Noodles', '1 cup Snap Peas'],
+        instructions: ['High-heat stir fry sirloin and veggies in soy-sesame sauce.'],
+        familyFriendlyNote: 'Serve noodles and steak strips un-sauced for kids.',
+      },
+    ];
 
-CLIENT NUTRITION PROFILE (1 Adult Serving Base):
-- Client Name: ${clientName}
-- Target Daily Calories: ${clientCalories ? `${clientCalories} kcal` : 'Not specified'}
-- Target Daily Protein: ${clientProtein ? `${clientProtein}g` : 'Not specified'}
-- Client Exclusions: ${clientExclusions.length > 0 ? clientExclusions.join(', ') : 'None'}
+    // Build complete 7-day calendar dynamically based on weeklySchedule
+    const mockWeeklyCalendar = days.map((day, dayIndex) => {
+      const daySchedule = weeklySchedule[day] || {};
+      const meals = [];
 
-HOUSEHOLD & SCALING PROFILE:
-- Household Adults: ${household.adults}
-- Household Children: ${household.children}
-- Total Portion Yield Multiplier for Shared Meals: ${totalPortionWeight}x
-- Family Dislikes / Preferences: ${household.familyDislikes.length > 0 ? household.familyDislikes.join(', ') : 'None'}
+      for (const [type, slotData] of Object.entries(daySchedule) as [string, any][]) {
+        if (slotData.status === 'generate') {
+          let selectedMeal;
+          
+          if (type === 'Lunch') {
+            const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
+            selectedMeal = { ...lunchPool[index], type };
+          } else if (type === 'Dinner') {
+            const index = enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
+            selectedMeal = { ...dinnerPool[index], type };
+          } else {
+            selectedMeal = {
+              type,
+              name: `Custom ${type} Protocol`,
+              calories: clientCalories ? Math.round(clientCalories * 0.25) : 400,
+              protein: clientProtein ? Math.round(clientProtein * 0.25) : 30,
+              carbs: 40,
+              fat: 12,
+              ingredients: ['Greek Yogurt', 'Berries', 'Almonds'],
+              instructions: ['Combine ingredients and serve.'],
+              familyFriendlyNote: 'Easily adjustable portion size for kids.',
+            };
+          }
 
-PREFERENCES:
-- Budget Tier: ${budgetLevel}
-- Max Prep Time: ${maxPrepTime}
-- Variety Level: ${varietyLevel}
-- Enable Bulk/Batch Prep: ${enableBulkPrep ? 'Yes' : 'No'}
-- Avoid Duplicates: ${recipeHistory.join(', ') || 'None'}
-
-WEEKLY SCHEDULE MATRIX (Includes status & shared flag):
-${JSON.stringify(weeklySchedule, null, 2)}
-
-REQUIRED JSON OUTPUT FORMAT:
-{
-  "weeklyCalendar": [
-    {
-      "day": "MON",
-      "meals": [
-        {
-          "type": "Dinner",
-          "name": "Pan-Seared Salmon with Jasmine Rice & Asparagus",
-          "calories": 650,
-          "protein": 48,
-          "carbs": 55,
-          "fat": 22,
-          "ingredients": ["6oz Salmon Fillet", "1 cup Cooked Jasmine Rice", "10 spears Asparagus"],
-          "instructions": ["Step 1...", "Step 2..."],
-          "familyFriendlyNote": "Keep garlic butter sauce on the side for kids and serve salmon plain."
+          meals.push(selectedMeal);
         }
-      ]
-    }
-  ],
-  "groceries": [
-    {
-      "category": "Proteins",
-      "item": "Salmon Fillet",
-      "amount": "${(6 * totalPortionWeight).toFixed(1)} oz per shared dinner"
-    }
-  ],
-  "estimatedGroceryCost": "$140 – $190 USD"
-}
-`;
+      }
 
-    /* 
-      Example OpenAI API call:
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        response_format: { type: 'json_object' }
-      });
-      const responseData = JSON.parse(completion.choices[0].message.content || '{}');
-    */
+      return { day, meals };
+    });
 
-    // Placeholder mock return for immediate front-end testing
+    // Mock consolidated grocery matrix scaled by totalPortionWeight
+    const mockGroceries = [
+      {
+        category: 'Proteins',
+        item: 'Chicken Breast',
+        amount: `${(1.5 * totalPortionWeight).toFixed(1)} lbs`,
+      },
+      {
+        category: 'Proteins',
+        item: 'Lean Ground Beef (93/7)',
+        amount: `${(1.2 * totalPortionWeight).toFixed(1)} lbs`,
+      },
+      {
+        category: 'Proteins',
+        item: 'Wild Salmon Fillets',
+        amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs`,
+      },
+      { category: 'Grains & Carbs', item: 'Jasmine Rice', amount: '2 Bags' },
+      { category: 'Grains & Carbs', item: 'Sweet Potatoes', amount: '4 Large' },
+      { category: 'Produce', item: 'Fresh Broccoli', amount: '3 Crowns' },
+      { category: 'Produce', item: 'Asparagus', amount: '2 Bunches' },
+    ];
+
     const mockData = {
-      weeklyCalendar: [
-        {
-          day: 'MON',
-          meals: [
-            {
-              type: 'Dinner',
-              name: 'Family-Style Honey Garlic Chicken & Rice',
-              calories: clientCalories ? Math.round(clientCalories * 0.35) : 680,
-              protein: clientProtein ? Math.round(clientProtein * 0.35) : 50,
-              carbs: 65,
-              fat: 18,
-              ingredients: ['6oz Chicken Breast', '1 cup Jasmine Rice', '1 cup Steamed Broccoli'],
-              instructions: [
-                'Cook chicken in pan with garlic honey glaze.',
-                'Serve over jasmine rice with steamed broccoli on the side.',
-              ],
-              familyFriendlyNote: 'Deconstruct for children: serve chicken plain without honey garlic glaze on top.',
-            },
-          ],
-        },
-      ],
-      groceries: [
-        {
-          category: 'Proteins',
-          item: 'Chicken Breast',
-          amount: `${(0.375 * totalPortionWeight).toFixed(1)} lbs`,
-        },
-        { category: 'Grains & Carbs', item: 'Jasmine Rice', amount: '1 Bag' },
-        { category: 'Produce', item: 'Broccoli', amount: '2 Crowns' },
-      ],
-      estimatedGroceryCost: `$${Math.round(40 * totalPortionWeight)} – $${Math.round(65 * totalPortionWeight)} USD`,
+      weeklyCalendar: mockWeeklyCalendar,
+      groceries: mockGroceries,
+      estimatedGroceryCost: `$${Math.round(90 * totalPortionWeight)} – $${Math.round(140 * totalPortionWeight)} USD`,
     };
 
     return NextResponse.json(mockData);

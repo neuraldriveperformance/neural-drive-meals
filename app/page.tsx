@@ -27,7 +27,7 @@ type WeeklySchedule = {
 export default function Home() {
   const [clientName, setClientName] = useState('');
   
-  // 1. Unpolluted Client Macros
+  // 1. Client Nutrition Layer
   const [clientCalories, setClientCalories] = useState<number | ''>('');
   const [clientProtein, setClientProtein] = useState<number | ''>('');
   const [clientExclusions, setClientExclusions] = useState<string[]>([]);
@@ -41,6 +41,7 @@ export default function Home() {
   });
   const [dislikeInput, setDislikeInput] = useState('');
 
+  // 3. Engine Preferences & Controls
   const [budget, setBudget] = useState('moderate');
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
   const [variety, setVariety] = useState(3);
@@ -54,13 +55,13 @@ export default function Home() {
   const [estimatedCost, setEstimatedCost] = useState('');
   const [selectedMeal, setSelectedMeal] = useState<any | null>(null);
 
-  // 3. Updated Schedule Matrix with Shared Toggles
+  // 4. Schedule Matrix State
   const [schedule, setSchedule] = useState<WeeklySchedule>({
-    MON: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
-    TUE: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
-    WED: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'self', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
-    THU: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
-    FRI: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
+    MON: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
+    TUE: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
+    WED: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
+    THU: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
+    FRI: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
     SAT: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'off', shared: false }, Dinner: { status: 'off', shared: false }, Snacks: { status: 'off', shared: false } },
     SUN: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'off', shared: false }, Dinner: { status: 'off', shared: false }, Snacks: { status: 'off', shared: false } },
   });
@@ -217,7 +218,6 @@ export default function Home() {
         {/* CONFIGURATION PANEL */}
         <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
           
-          {/* TWO-COLUMN ARCHITECTURAL LAYOUT */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
             {/* COLUMN 1: CLIENT NUTRITION LAYER */}
@@ -320,7 +320,6 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Adult & Child Counters */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl flex items-center justify-between">
                       <div>
@@ -371,22 +370,20 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Dynamic Multiplier Readout */}
                   <div className="bg-[#0F1724]/80 border border-[#00F2FE]/30 p-2.5 rounded-lg text-center">
                     <span className="text-xs text-gray-300">
                       Total Shared Meal Yield Multiplier: <strong className="text-[#00F2FE] text-sm">{totalPortionWeight}x Adult Portions</strong>
                     </span>
                   </div>
 
-                  {/* Family Dislikes */}
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
-                      Family Preferences & Dislikes (e.g. Spicy, Mushrooms)
+                      Family Preferences & Dislikes
                     </label>
                     <div className="flex gap-2 mb-2">
                       <input
                         type="text"
-                        placeholder="e.g. No Cilantro"
+                        placeholder="e.g. Spicy, Mushrooms"
                         value={dislikeInput}
                         onChange={(e) => setDislikeInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && addFamilyDislike()}
@@ -416,6 +413,62 @@ export default function Home() {
             </div>
           </div>
 
+          {/* VARIETY & BATCH PREP CONTROLS */}
+          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
+            <div className="border-b border-[#1E2D4A] pb-3">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
+                3. Recipe Variety & Batch Cooking Strategy
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              {/* Variety Slider */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <label className="font-bold text-gray-300 uppercase text-[10px]">
+                    Meal Variety Level ({variety}/5)
+                  </label>
+                  <span className="text-[#00F2FE] font-bold text-[11px]">
+                    {variety === 1
+                      ? '1 - High Repeat (Fast Prep)'
+                      : variety === 2
+                      ? '2 - Moderate Repeats'
+                      : variety === 3
+                      ? '3 - Balanced Rotation'
+                      : variety === 4
+                      ? '4 - High Variety'
+                      : '5 - Maximum Variety (Unique Daily)'}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="5"
+                  value={variety}
+                  onChange={(e) => setVariety(Number(e.target.value))}
+                  className="w-full accent-[#00F2FE] bg-[#0F1724] rounded-lg h-2 cursor-pointer"
+                />
+              </div>
+
+              {/* Bulk Prep Toggle */}
+              <div className="flex items-center justify-between bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl">
+                <div>
+                  <div className="text-xs font-bold text-white">Enable Batch Cooking Strategy</div>
+                  <div className="text-[10px] text-gray-400">Reuses cooked proteins/grains across consecutive lunches/dinners</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkPrep(!bulkPrep)}
+                  className={`px-4 py-1.5 rounded-lg font-black text-xs transition ${
+                    bulkPrep ? 'bg-[#00F2FE] text-black' : 'bg-[#1E2D4A] text-gray-400'
+                  }`}
+                >
+                  {bulkPrep ? 'ENABLED' : 'DISABLED'}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* SCHEDULE MATRIX WITH SHARED TOGGLES */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -423,7 +476,7 @@ export default function Home() {
                 <label className="text-[11px] font-bold text-gray-400 uppercase">
                   Weekly Schedule Matrix & Shared Toggles
                 </label>
-                <p className="text-[10px] text-gray-500">Click a slot to toggle state. Click badge to toggle 👤 Solo vs 👨‍👩‍👧 Shared.</p>
+                <p className="text-[10px] text-gray-500">Click slot to cycle. Click badge to toggle 👤 Solo vs 👨‍👩‍👧 Shared.</p>
               </div>
               <div className="flex gap-3 text-[10px] font-semibold">
                 <span className="text-[#00F2FE]">● Generate</span>
@@ -584,7 +637,6 @@ export default function Home() {
               <h3 className="text-2xl font-black mt-1 text-white">{selectedMeal.name}</h3>
             </div>
 
-            {/* FAMILY FRIENDLY DECONSTRUCTION TIP BADGE */}
             {selectedMeal.familyFriendlyNote && (
               <div className="bg-amber-500/10 border border-amber-500/40 p-3 rounded-xl flex items-start gap-2.5">
                 <span className="text-base">👨‍👩‍👧</span>
