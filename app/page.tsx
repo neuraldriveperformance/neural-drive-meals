@@ -4,6 +4,9 @@ import React, { useState, useEffect } from 'react';
 import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryList, { GroceryCategory } from './Components/GroceryList';
 
+const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+
 export default function Home() {
   const [clientName, setClientName] = useState('');
   const [dailyCalories, setDailyCalories] = useState<number | ''>('');
@@ -15,50 +18,51 @@ export default function Home() {
   
   const [bulkPrep, setBulkPrep] = useState(false);
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   const [exclusions, setExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
-  const [schedule, setSchedule] = useState<{ [day: string]: string[] }>({
-    MON: ['Lunch', 'Dinner'],
-    TUE: ['Lunch', 'Dinner'],
-    WED: ['Lunch', 'Dinner'],
-    THU: ['Lunch', 'Dinner'],
-    FRI: ['Lunch', 'Dinner'],
-    SAT: [],
-    SUN: [],
-  });
-
-  const [loading, setLoading] = useState(false);
-  const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
-  const [groceries, setGroceries] = useState<GroceryCategory[] | null>(null);
-  const [estimatedCost, setEstimatedCost] = useState<string>('');
   const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
-
-  // STATE FOR RECIPE MODAL POPUP
+  const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
+  const [groceries, setGroceries] = useState<GroceryCategory[]>([]);
+  const [estimatedCost, setEstimatedCost] = useState('');
   const [selectedMeal, setSelectedMeal] = useState<any | null>(null);
+
+  const [schedule, setSchedule] = useState<{ [day: string]: { [slot: string]: 'generate' | 'self' | 'off' } }>({
+    MON: { Breakfast: 'off', Lunch: 'generate', Dinner: 'generate', Snacks: 'off' },
+    TUE: { Breakfast: 'off', Lunch: 'generate', Dinner: 'generate', Snacks: 'off' },
+    WED: { Breakfast: 'off', Lunch: 'self', Dinner: 'generate', Snacks: 'off' },
+    THU: { Breakfast: 'off', Lunch: 'generate', Dinner: 'generate', Snacks: 'off' },
+    FRI: { Breakfast: 'off', Lunch: 'generate', Dinner: 'generate', Snacks: 'off' },
+    SAT: { Breakfast: 'off', Lunch: 'off', Dinner: 'off', Snacks: 'off' },
+    SUN: { Breakfast: 'off', Lunch: 'off', Dinner: 'off', Snacks: 'off' },
+  });
 
   useEffect(() => {
     try {
-      const storedHistory = localStorage.getItem('ndp_recipe_history');
-      if (storedHistory) {
-        setRecipeHistory(JSON.parse(storedHistory));
+      const savedHistory = localStorage.getItem('ndp_recipe_history');
+      if (savedHistory) {
+        setRecipeHistory(JSON.parse(savedHistory));
       }
     } catch (e) {
       console.warn('Unable to load recipe history from localStorage:', e);
     }
   }, []);
 
-  const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-  const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
-
-  const toggleMealSlot = (day: string, slot: string) => {
+  const cycleMealSlot = (day: string, slot: string) => {
     setSchedule((prev) => {
-      const current = prev[day] || [];
-      const updated = current.includes(slot)
-        ? current.filter((item) => item !== slot)
-        : [...current, slot];
-      return { ...prev, [day]: updated };
+      const currentStatus = prev[day]?.[slot] || 'off';
+      const nextStatus =
+        currentStatus === 'off'
+          ? 'generate'
+          : currentStatus === 'generate'
+          ? 'self'
+          : 'off';
+      return {
+        ...prev,
+        [day]: { ...(prev[day] || {}), [slot]: nextStatus },
+      };
     });
   };
 
@@ -242,7 +246,7 @@ export default function Home() {
           exclusions,
           householdSize,
           budgetLevel: budget,
-          weeklySchedule: { MON: [mealType] },
+          weeklySchedule: { MON: { [mealType]: 'generate' } },
           varietyLevel: 5,
           maxPrepTime,
           recipeHistory: Array.from(new Set([...recipeHistory, ...activeRecipeNames, oldMealName])).slice(-60),
@@ -438,9 +442,16 @@ export default function Home() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-gray-400 uppercase mb-3">
-              Weekly Meal Schedule Matrix
-            </label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-[11px] font-bold text-gray-400 uppercase">
+                Weekly Meal Schedule Matrix
+              </label>
+              <div className="flex gap-3 text-[10px] font-semibold">
+                <span className="text-[#00F2FE]">● Generate</span>
+                <span className="text-amber-400">● Self-Provided</span>
+                <span className="text-gray-500">○ Off</span>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {daysOfWeek.map((day) => (
                 <div key={day} className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-3 space-y-2 flex flex-col">
@@ -449,20 +460,24 @@ export default function Home() {
                   </div>
                   <div className="space-y-1.5 flex-1">
                     {mealTypes.map((type) => {
-                      const active = schedule[day]?.includes(type);
+                      const status = schedule[day]?.[type] || 'off';
                       return (
                         <button
                           key={type}
                           type="button"
-                          onClick={() => toggleMealSlot(day, type)}
+                          onClick={() => cycleMealSlot(day, type)}
                           className={`w-full text-left text-[11px] px-2.5 py-1.5 rounded font-bold transition flex items-center justify-between ${
-                            active
+                            status === 'generate'
                               ? 'bg-[#00F2FE]/20 text-[#00F2FE] border border-[#00F2FE]/50'
+                              : status === 'self'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
                               : 'bg-[#0F1724] text-gray-500 border border-[#1E2D4A] hover:text-gray-300'
                           }`}
                         >
                           <span>{type}</span>
-                          <span className="text-[10px]">{active ? '✓' : '+'}</span>
+                          <span className="text-[10px]">
+                            {status === 'generate' ? 'GEN' : status === 'self' ? 'SELF' : 'OFF'}
+                          </span>
                         </button>
                       );
                     })}
