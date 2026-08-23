@@ -6,8 +6,8 @@ export async function POST(req: Request) {
 
     const {
       clientName = 'Client',
-      clientCalories,
-      clientProtein,
+      clientCalories = 2000,
+      clientProtein = 150,
       clientExclusions = [],
       household = { adults: 1, teens: 0, children: 0, familyDislikes: [] },
       totalPortionWeight = 1.0,
@@ -35,7 +35,6 @@ export async function POST(req: Request) {
       (e) => e.includes('vegetarian') || e.includes('vegan') || e.includes('no meat')
     );
 
-    // Explicit terms to block if vegetarian/vegan is selected
     const meatTerms = [
       'beef', 'chicken', 'turkey', 'pork', 'salmon', 'fish', 'steak', 'meat',
       'poultry', 'shrimp', 'tuna', 'cod', 'seafood', 'bacon'
@@ -45,12 +44,29 @@ export async function POST(req: Request) {
       new Set([...exclusionsLower, ...(isVegetarian ? meatTerms : [])])
     );
 
-    // 2. RECIPE POOLS (INCLUDES VEGETARIAN PROTOCOLS)
+    // Helper function to scale meal macros accurately
+    const createScaledMeal = (baseMeal: any, targetCals: number, targetProt: number, type: string) => {
+      const cals = targetCals || baseMeal.calories;
+      const prot = targetProt || baseMeal.protein;
+      // Proportional ratio for carbs and fat based on target calories
+      const ratio = cals / (baseMeal.calories || 600);
+
+      return {
+        ...baseMeal,
+        type,
+        calories: Math.round(cals),
+        protein: Math.round(prot),
+        carbs: Math.round(baseMeal.carbs * ratio),
+        fat: Math.round(baseMeal.fat * ratio),
+      };
+    };
+
+    // 2. RECIPE POOLS
     const rawLunchPool = [
       {
         name: 'Crispy Tofu & Quinoa Buddha Bowl',
-        calories: clientCalories ? Math.round(clientCalories * 0.35) : 600,
-        protein: clientProtein ? Math.round(clientProtein * 0.35) : 42,
+        calories: 600,
+        protein: 42,
         carbs: 60,
         fat: 18,
         ingredients: [
@@ -70,8 +86,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Chickpea & Lentil Power Salad with Lemon Tahini',
-        calories: clientCalories ? Math.round(clientCalories * 0.35) : 580,
-        protein: clientProtein ? Math.round(clientProtein * 0.35) : 38,
+        calories: 580,
+        protein: 38,
         carbs: 65,
         fat: 16,
         ingredients: [
@@ -91,8 +107,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Lean Beef & Rice Meal Prep Bowl',
-        calories: clientCalories ? Math.round(clientCalories * 0.35) : 650,
-        protein: clientProtein ? Math.round(clientProtein * 0.35) : 48,
+        calories: 650,
+        protein: 48,
         carbs: 55,
         fat: 16,
         ingredients: [
@@ -114,8 +130,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Grilled Chicken & Quinoa Harvest Salad',
-        calories: clientCalories ? Math.round(clientCalories * 0.35) : 620,
-        protein: clientProtein ? Math.round(clientProtein * 0.35) : 52,
+        calories: 620,
+        protein: 52,
         carbs: 45,
         fat: 18,
         ingredients: [
@@ -135,8 +151,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Turkey Burrito Bowl with Black Beans & Salsa',
-        calories: clientCalories ? Math.round(clientCalories * 0.35) : 640,
-        protein: clientProtein ? Math.round(clientProtein * 0.35) : 45,
+        calories: 640,
+        protein: 45,
         carbs: 60,
         fat: 15,
         ingredients: [
@@ -159,8 +175,8 @@ export async function POST(req: Request) {
     const rawDinnerPool = [
       {
         name: 'High-Protein Black Bean & Tempeh Fajitas',
-        calories: clientCalories ? Math.round(clientCalories * 0.4) : 710,
-        protein: clientProtein ? Math.round(clientProtein * 0.4) : 46,
+        calories: 710,
+        protein: 46,
         carbs: 70,
         fat: 20,
         ingredients: [
@@ -180,8 +196,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Pan-Seared Honey Garlic Tofu & Jasmine Rice',
-        calories: clientCalories ? Math.round(clientCalories * 0.4) : 690,
-        protein: clientProtein ? Math.round(clientProtein * 0.4) : 40,
+        calories: 690,
+        protein: 40,
         carbs: 75,
         fat: 16,
         ingredients: [
@@ -201,8 +217,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Pan-Seared Honey Garlic Chicken & Rice',
-        calories: clientCalories ? Math.round(clientCalories * 0.4) : 720,
-        protein: clientProtein ? Math.round(clientProtein * 0.4) : 55,
+        calories: 720,
+        protein: 55,
         carbs: 65,
         fat: 18,
         ingredients: [
@@ -222,8 +238,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Sheet Pan Wild Salmon & Roasted Sweet Potatoes',
-        calories: clientCalories ? Math.round(clientCalories * 0.4) : 700,
-        protein: clientProtein ? Math.round(clientProtein * 0.4) : 50,
+        calories: 700,
+        protein: 50,
         carbs: 50,
         fat: 24,
         ingredients: [
@@ -241,8 +257,8 @@ export async function POST(req: Request) {
       },
       {
         name: 'Lean Beef Stir-Fry with Snap Peas & Noodles',
-        calories: clientCalories ? Math.round(clientCalories * 0.4) : 740,
-        protein: clientProtein ? Math.round(clientProtein * 0.4) : 52,
+        calories: 740,
+        protein: 52,
         carbs: 70,
         fat: 18,
         ingredients: [
@@ -260,82 +276,85 @@ export async function POST(req: Request) {
       },
     ];
 
-    // 3. STRICT EXCLUSION FILTERING FUNCTION
+    // 3. STRICT EXCLUSION FILTERING
     const isMealAllowed = (meal: any) => {
       if (activeBannedTerms.length === 0) return true;
-
       const fullMealText = `${meal.name} ${meal.ingredients.join(' ')}`.toLowerCase();
-
       return !activeBannedTerms.some((term) => fullMealText.includes(term.trim()));
     };
 
-    // Filter pools against banned ingredients
     let lunchPool = rawLunchPool.filter(isMealAllowed);
     let dinnerPool = rawDinnerPool.filter(isMealAllowed);
 
-    // Safety fallback: if all meals got filtered out, fall back exclusively to plant-based options
     if (lunchPool.length === 0) lunchPool = rawLunchPool.filter((m) => m.isPlantBased);
     if (dinnerPool.length === 0) dinnerPool = rawDinnerPool.filter((m) => m.isPlantBased);
 
     // --- SWAP REQUEST HANDLER ---
     if (isSwapRequest && swapTarget) {
       const pool = swapTarget.type === 'Lunch' ? lunchPool : swapTarget.type === 'Dinner' ? dinnerPool : lunchPool;
-
       const randomIndex = Math.floor(Math.random() * pool.length);
-      const swappedMeal = {
-        ...pool[randomIndex],
-        type: swapTarget.type,
-      };
+      const swappedMeal = createScaledMeal(
+        pool[randomIndex],
+        clientCalories ? clientCalories * 0.5 : 700,
+        clientProtein ? clientProtein * 0.5 : 50,
+        swapTarget.type
+      );
 
       return NextResponse.json({ swappedMeal });
     }
 
-    // --- FULL PLAN GENERATION HANDLER ---
+    // --- FULL PLAN GENERATION HANDLER WITH DYNAMIC MACRO SCALING ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
       const daySchedule = weeklySchedule[day] || {};
-      const meals = [];
+      
+      // Get all active slots that are scheduled to generate
+      const activeSlots = Object.entries(daySchedule).filter(
+        ([_, slotData]: [string, any]) => slotData.status === 'generate'
+      );
 
-      for (const [type, slotData] of Object.entries(daySchedule) as [string, any][]) {
-        if (slotData.status === 'generate') {
-          let selectedMeal;
+      const activeCount = activeSlots.length;
+      
+      // Calculate target calories & protein per active meal slot
+      const perMealCalories = activeCount > 0 && clientCalories ? clientCalories / activeCount : 600;
+      const perMealProtein = activeCount > 0 && clientProtein ? clientProtein / activeCount : 40;
 
-          if (type === 'Lunch') {
-            const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
-            selectedMeal = { ...lunchPool[index], type };
-          } else if (type === 'Dinner') {
-            const index = enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
-            selectedMeal = { ...dinnerPool[index], type };
-          } else {
-            selectedMeal = {
-              type,
-              name: isVegetarian ? 'Berry & Almond Greek Yogurt Parfait' : `Custom ${type} Protocol`,
-              calories: clientCalories ? Math.round(clientCalories * 0.25) : 400,
-              protein: clientProtein ? Math.round(clientProtein * 0.25) : 30,
-              carbs: 40,
-              fat: 12,
-              ingredients: [
-                '3/4 cup Low-Fat Plain Greek Yogurt',
-                '1/2 cup Mixed Fresh Berries',
-                '1 tbsp Raw Whole Almonds',
-                '1 tsp Raw Honey',
-              ],
-              instructions: [
-                'Spoon Greek yogurt into a bowl.',
-                'Top with mixed berries and chopped almonds.',
-                'Drizzle honey over the top.',
-              ],
-              familyFriendlyNote: 'Adjustable portion sizes across kids and teens.',
-            };
-          }
+      const meals = activeSlots.map(([type, _]) => {
+        let baseMeal;
 
-          meals.push(selectedMeal);
+        if (type === 'Lunch') {
+          const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
+          baseMeal = lunchPool[index];
+        } else if (type === 'Dinner') {
+          const index = enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
+          baseMeal = dinnerPool[index];
+        } else {
+          baseMeal = {
+            name: isVegetarian ? 'Berry & Almond Greek Yogurt Parfait' : `Custom ${type} Protocol`,
+            calories: 400,
+            protein: 30,
+            carbs: 40,
+            fat: 12,
+            ingredients: [
+              '3/4 cup Low-Fat Plain Greek Yogurt',
+              '1/2 cup Mixed Fresh Berries',
+              '1 tbsp Raw Whole Almonds',
+              '1 tsp Raw Honey',
+            ],
+            instructions: [
+              'Spoon Greek yogurt into a bowl.',
+              'Top with mixed berries and chopped almonds.',
+              'Drizzle honey over the top.',
+            ],
+            familyFriendlyNote: 'Adjustable portion sizes across kids and teens.',
+          };
         }
-      }
+
+        return createScaledMeal(baseMeal, perMealCalories, perMealProtein, type);
+      });
 
       return { day, meals };
     });
 
-    // Grocery filtering based on vegetarian preferences
     const mockGroceries = isVegetarian
       ? [
           { category: 'Proteins', item: 'Extra-Firm Tofu', amount: `${(2.0 * totalPortionWeight).toFixed(1)} lbs` },
