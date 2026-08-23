@@ -23,7 +23,72 @@ export async function POST(req: Request) {
 
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-    const lunchPool = [
+    // 1. COMBINE ALL EXCLUSIONS AND DISLIKES
+    const rawExclusions = [
+      ...(clientExclusions || []),
+      ...(household?.familyDislikes || []),
+    ].filter(Boolean);
+
+    const exclusionsLower = rawExclusions.map((e) => e.toLowerCase());
+
+    const isVegetarian = exclusionsLower.some(
+      (e) => e.includes('vegetarian') || e.includes('vegan') || e.includes('no meat')
+    );
+
+    // Explicit terms to block if vegetarian/vegan is selected
+    const meatTerms = [
+      'beef', 'chicken', 'turkey', 'pork', 'salmon', 'fish', 'steak', 'meat',
+      'poultry', 'shrimp', 'tuna', 'cod', 'seafood', 'bacon'
+    ];
+
+    const activeBannedTerms = Array.from(
+      new Set([...exclusionsLower, ...(isVegetarian ? meatTerms : [])])
+    );
+
+    // 2. RECIPE POOLS (INCLUDES VEGETARIAN PROTOCOLS)
+    const rawLunchPool = [
+      {
+        name: 'Crispy Tofu & Quinoa Buddha Bowl',
+        calories: clientCalories ? Math.round(clientCalories * 0.35) : 600,
+        protein: clientProtein ? Math.round(clientProtein * 0.35) : 42,
+        carbs: 60,
+        fat: 18,
+        ingredients: [
+          '7oz Extra-Firm Tofu (cubed & baked)',
+          '1 cup Cooked Quinoa',
+          '1/2 cup Edamame Beans',
+          '1 cup Shredded Purple Cabbage',
+          '1 tbsp Peanut Butter Dressing',
+        ],
+        instructions: [
+          'Press and cube tofu, season with soy sauce and cornstarch, and bake at 400°F for 20 mins until crisp.',
+          'Assemble bowl with quinoa, edamame, cabbage, and baked tofu.',
+          'Drizzle peanut butter dressing on top.',
+        ],
+        familyFriendlyNote: 'Serve dressing on the side for kids.',
+        isPlantBased: true,
+      },
+      {
+        name: 'Chickpea & Lentil Power Salad with Lemon Tahini',
+        calories: clientCalories ? Math.round(clientCalories * 0.35) : 580,
+        protein: clientProtein ? Math.round(clientProtein * 0.35) : 38,
+        carbs: 65,
+        fat: 16,
+        ingredients: [
+          '1 cup Low-Sodium Chickpeas (rinsed)',
+          '1/2 cup Cooked Brown Lentils',
+          '2 cups Mixed Salad Greens',
+          '1/4 cup Diced Cucumbers',
+          '1.5 tbsp Lemon Tahini Dressing',
+        ],
+        instructions: [
+          'Combine chickpeas, lentils, greens, and diced cucumbers in a large bowl.',
+          'Whisk tahini, lemon juice, garlic, and water for dressing.',
+          'Toss salad with dressing right before serving.',
+        ],
+        familyFriendlyNote: 'Offer pita bread on the side for younger family members.',
+        isPlantBased: true,
+      },
       {
         name: 'Lean Beef & Rice Meal Prep Bowl',
         calories: clientCalories ? Math.round(clientCalories * 0.35) : 650,
@@ -37,18 +102,18 @@ export async function POST(req: Request) {
           '1 tsp Olive Oil',
           '1/2 tsp Garlic Powder',
           '1/2 tsp Onion Powder',
-          'Salt and Black Pepper to taste',
         ],
         instructions: [
           'Heat olive oil in a skillet over medium-high heat.',
-          'Add ground beef, garlic powder, onion powder, salt, and pepper; brown for 6-8 minutes until fully cooked.',
+          'Add ground beef, garlic powder, onion powder, salt, and pepper; brown for 6-8 minutes.',
           'Add diced bell peppers and saute for 3-4 minutes until tender-crisp.',
-          'Divide brown rice into prep containers and top with the seasoned beef and pepper mixture.',
+          'Divide brown rice into prep containers and top with beef mixture.',
         ],
-        familyFriendlyNote: 'Serve veggies on the side if preferred by children or teens.',
+        familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
+        isPlantBased: false,
       },
       {
-        name: 'Grilled Chicken & Quinoa Harvest Salad with Balsamic Vinaigrette',
+        name: 'Grilled Chicken & Quinoa Harvest Salad',
         calories: clientCalories ? Math.round(clientCalories * 0.35) : 620,
         protein: clientProtein ? Math.round(clientProtein * 0.35) : 52,
         carbs: 45,
@@ -57,19 +122,16 @@ export async function POST(req: Request) {
           '6oz Boneless Skinless Chicken Breast',
           '1 cup Cooked Quinoa',
           '2 cups Mixed Salad Greens',
-          '1 tbsp Extra Virgin Olive Oil (Dressing)',
-          '1 tbsp Balsamic Vinegar (Dressing)',
-          '1 tsp Dijon Mustard (Dressing)',
-          '1 tsp Honey (Dressing)',
-          'Salt and Black Pepper to taste',
+          '1 tbsp Extra Virgin Olive Oil',
+          '1 tbsp Balsamic Vinegar',
         ],
         instructions: [
-          'Season chicken breast with salt and pepper, then grill on medium-high heat for 6-7 minutes per side until internal temp reaches 165°F.',
-          'Whisk together olive oil, balsamic vinegar, Dijon mustard, and honey in a small bowl to make the dressing.',
-          'Slice chicken and layer over a bed of mixed greens and cooked quinoa.',
-          'Drizzle vinaigrette over the salad right before serving.',
+          'Season chicken breast and grill on medium-high heat for 6-7 mins per side.',
+          'Whisk olive oil and balsamic vinegar for dressing.',
+          'Slice chicken and layer over greens and quinoa.',
         ],
-        familyFriendlyNote: 'Keep dressing on the side for younger family members.',
+        familyFriendlyNote: 'Keep dressing on the side for kids.',
+        isPlantBased: false,
       },
       {
         name: 'Turkey Burrito Bowl with Black Beans & Salsa',
@@ -79,24 +141,64 @@ export async function POST(req: Request) {
         fat: 15,
         ingredients: [
           '6oz Lean Ground Turkey',
-          '1/2 cup Low-Sodium Black Beans (rinsed & drained)',
-          '1 cup Cooked White Jasmine Rice',
-          '3 tbsp Fresh Tomato Salsa',
+          '1/2 cup Low-Sodium Black Beans',
+          '1 cup Cooked Jasmine Rice',
+          '3 tbsp Fresh Salsa',
           '1/2 tsp Ground Cumin',
-          '1/2 tsp Chili Powder',
-          '1 tbsp Chopped Fresh Cilantro',
         ],
         instructions: [
-          'Brown ground turkey in a skillet over medium heat, seasoning with ground cumin, chili powder, salt, and pepper.',
-          'Warm black beans in a small saucepan or microwave.',
-          'Layer cooked jasmine rice, black beans, and spiced turkey into bowls.',
-          'Top with fresh tomato salsa and cilantro.',
+          'Brown turkey in a skillet with cumin, salt, and pepper.',
+          'Layer cooked jasmine rice, black beans, and turkey into bowls.',
+          'Top with fresh salsa.',
         ],
-        familyFriendlyNote: 'Keep spicy salsa separate for kids and teens.',
+        familyFriendlyNote: 'Keep salsa separate for kids.',
+        isPlantBased: false,
       },
     ];
 
-    const dinnerPool = [
+    const rawDinnerPool = [
+      {
+        name: 'High-Protein Black Bean & Tempeh Fajitas',
+        calories: clientCalories ? Math.round(clientCalories * 0.4) : 710,
+        protein: clientProtein ? Math.round(clientProtein * 0.4) : 46,
+        carbs: 70,
+        fat: 20,
+        ingredients: [
+          '6oz Sliced Tempeh',
+          '1 cup Black Beans',
+          '2 Whole Grain Tortillas',
+          '1 cup Bell Peppers & Onions (sliced)',
+          '2 tbsp Guacamole',
+        ],
+        instructions: [
+          'Sear tempeh slices and fajita veggies in a hot skillet with taco seasoning for 6-8 mins.',
+          'Warm tortillas and layer with black beans, tempeh, and veggies.',
+          'Top with guacamole.',
+        ],
+        familyFriendlyNote: 'Assemble as DIY taco night for kids.',
+        isPlantBased: true,
+      },
+      {
+        name: 'Pan-Seared Honey Garlic Tofu & Jasmine Rice',
+        calories: clientCalories ? Math.round(clientCalories * 0.4) : 690,
+        protein: clientProtein ? Math.round(clientProtein * 0.4) : 40,
+        carbs: 75,
+        fat: 16,
+        ingredients: [
+          '8oz Firm Tofu (cubed)',
+          '1.25 cups Cooked Jasmine Rice',
+          '1 cup Steamed Broccoli',
+          '1.5 tbsp Honey Soy Glaze',
+          '1 tsp Sesame Oil',
+        ],
+        instructions: [
+          'Sear cubed tofu in sesame oil until golden on all sides.',
+          'Pour honey soy glaze over tofu and simmer until thick.',
+          'Serve glazed tofu over jasmine rice with steamed broccoli.',
+        ],
+        familyFriendlyNote: 'Serve sauce on the side for kids.',
+        isPlantBased: true,
+      },
       {
         name: 'Pan-Seared Honey Garlic Chicken & Rice',
         calories: clientCalories ? Math.round(clientCalories * 0.4) : 720,
@@ -107,19 +209,16 @@ export async function POST(req: Request) {
           '7oz Boneless Skinless Chicken Breast',
           '1.25 cups Cooked Jasmine Rice',
           '1 cup Steamed Broccoli Florets',
-          '1.5 tbsp Raw Honey (Glaze)',
-          '2 Cloves Garlic (minced) (Glaze)',
-          '1 tbsp Low-Sodium Soy Sauce (Glaze)',
-          '1 tsp Olive Oil',
-          '1 tsp Cornstarch mixed with 1 tbsp water (Glaze thickener)',
+          '1.5 tbsp Raw Honey',
+          '1 tbsp Low-Sodium Soy Sauce',
         ],
         instructions: [
-          'In a small bowl, whisk together honey, minced garlic, low-sodium soy sauce, and the cornstarch slurry.',
-          'Heat olive oil in a skillet over medium-high heat. Season chicken breast with salt and pepper and sear for 5-6 minutes per side until golden.',
-          'Reduce heat to low, pour the honey garlic mixture over the chicken, and simmer for 2-3 minutes until glaze thickens and coats the chicken.',
-          'Serve glazed chicken alongside cooked jasmine rice and steamed broccoli.',
+          'Sear seasoned chicken breast in a skillet until golden.',
+          'Pour honey and soy sauce over chicken and simmer until glaze thickens.',
+          'Serve with jasmine rice and steamed broccoli.',
         ],
-        familyFriendlyNote: 'Deconstruct for children: serve chicken plain without extra glaze.',
+        familyFriendlyNote: 'Deconstruct for children without extra glaze.',
+        isPlantBased: false,
       },
       {
         name: 'Sheet Pan Wild Salmon & Roasted Sweet Potatoes',
@@ -132,17 +231,13 @@ export async function POST(req: Request) {
           '1.5 cups Sweet Potato Cubes',
           '10 Fresh Asparagus Spears',
           '1 tbsp Olive Oil',
-          '1/2 Lemon (sliced into wheels)',
-          '1/2 tsp Dried Dill',
-          'Salt and Black Pepper to taste',
         ],
         instructions: [
-          'Preheat oven to 400°F (200°C) and line a sheet pan with parchment paper.',
-          'Toss sweet potato cubes with half the olive oil, salt, and pepper. Spread on pan and bake for 10 minutes.',
-          'Remove pan, add salmon fillet and asparagus. Drizzle remaining olive oil, sprinkle salmon with dill, salt, and pepper, and top with lemon slices.',
-          'Return to oven and bake for an additional 12-15 minutes until salmon flakes easily.',
+          'Roast sweet potatoes at 400°F for 10 mins.',
+          'Add salmon and asparagus, bake 12-15 mins more until salmon flakes.',
         ],
-        familyFriendlyNote: 'Flake salmon into bite-size pieces for younger family members.',
+        familyFriendlyNote: 'Flake salmon into bite-size pieces for kids.',
+        isPlantBased: false,
       },
       {
         name: 'Lean Beef Stir-Fry with Snap Peas & Noodles',
@@ -151,29 +246,41 @@ export async function POST(req: Request) {
         carbs: 70,
         fat: 18,
         ingredients: [
-          '6oz Top Sirloin Steak (sliced into thin strips)',
+          '6oz Top Sirloin Steak (sliced)',
           '2 cups Cooked Udon Noodles',
           '1 cup Sugar Snap Peas',
-          '1.5 tbsp Low-Sodium Soy Sauce (Sauce)',
-          '1 tsp Toasted Sesame Oil (Sauce)',
-          '1 tsp Grated Fresh Ginger (Sauce)',
-          '1 Clove Garlic (minced) (Sauce)',
+          '1.5 tbsp Low-Sodium Soy Sauce',
         ],
         instructions: [
-          'Whisk soy sauce, sesame oil, grated ginger, and minced garlic together in a small bowl.',
-          'Heat a wok or skillet on high heat. Add beef strips and sear quickly for 2-3 minutes until browned.',
-          'Add snap peas and cooked udon noodles, then pour over the sauce mixture.',
-          'Toss continuously for 2 minutes until sauce evenly coats noodles and veggies.',
+          'Sear beef strips in a hot wok for 2-3 mins.',
+          'Add snap peas, noodles, and soy sauce, tossing for 2 mins.',
         ],
-        familyFriendlyNote: 'Serve noodles and steak strips un-sauced for kids.',
+        familyFriendlyNote: 'Serve plain noodles and steak strips for kids.',
+        isPlantBased: false,
       },
     ];
+
+    // 3. STRICT EXCLUSION FILTERING FUNCTION
+    const isMealAllowed = (meal: any) => {
+      if (activeBannedTerms.length === 0) return true;
+
+      const fullMealText = `${meal.name} ${meal.ingredients.join(' ')}`.toLowerCase();
+
+      return !activeBannedTerms.some((term) => fullMealText.includes(term.trim()));
+    };
+
+    // Filter pools against banned ingredients
+    let lunchPool = rawLunchPool.filter(isMealAllowed);
+    let dinnerPool = rawDinnerPool.filter(isMealAllowed);
+
+    // Safety fallback: if all meals got filtered out, fall back exclusively to plant-based options
+    if (lunchPool.length === 0) lunchPool = rawLunchPool.filter((m) => m.isPlantBased);
+    if (dinnerPool.length === 0) dinnerPool = rawDinnerPool.filter((m) => m.isPlantBased);
 
     // --- SWAP REQUEST HANDLER ---
     if (isSwapRequest && swapTarget) {
       const pool = swapTarget.type === 'Lunch' ? lunchPool : swapTarget.type === 'Dinner' ? dinnerPool : lunchPool;
-      
-      // Select a random meal from the pool
+
       const randomIndex = Math.floor(Math.random() * pool.length);
       const swappedMeal = {
         ...pool[randomIndex],
@@ -191,7 +298,7 @@ export async function POST(req: Request) {
       for (const [type, slotData] of Object.entries(daySchedule) as [string, any][]) {
         if (slotData.status === 'generate') {
           let selectedMeal;
-          
+
           if (type === 'Lunch') {
             const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
             selectedMeal = { ...lunchPool[index], type };
@@ -201,7 +308,7 @@ export async function POST(req: Request) {
           } else {
             selectedMeal = {
               type,
-              name: `Custom ${type} Protocol`,
+              name: isVegetarian ? 'Berry & Almond Greek Yogurt Parfait' : `Custom ${type} Protocol`,
               calories: clientCalories ? Math.round(clientCalories * 0.25) : 400,
               protein: clientProtein ? Math.round(clientProtein * 0.25) : 30,
               carbs: 40,
@@ -209,15 +316,15 @@ export async function POST(req: Request) {
               ingredients: [
                 '3/4 cup Low-Fat Plain Greek Yogurt',
                 '1/2 cup Mixed Fresh Berries',
-                '1 tbsp Raw Whole Almonds (chopped)',
+                '1 tbsp Raw Whole Almonds',
                 '1 tsp Raw Honey',
               ],
               instructions: [
                 'Spoon Greek yogurt into a bowl.',
                 'Top with mixed berries and chopped almonds.',
-                'Drizzle honey over the top and serve immediately.',
+                'Drizzle honey over the top.',
               ],
-              familyFriendlyNote: 'Easily adjustable portion sizes across kids and teens.',
+              familyFriendlyNote: 'Adjustable portion sizes across kids and teens.',
             };
           }
 
@@ -228,43 +335,28 @@ export async function POST(req: Request) {
       return { day, meals };
     });
 
-    const mockGroceries = [
-      {
-        category: 'Proteins',
-        item: 'Chicken Breast',
-        amount: `${(1.5 * totalPortionWeight).toFixed(1)} lbs`,
-      },
-      {
-        category: 'Proteins',
-        item: 'Lean Ground Beef (93/7)',
-        amount: `${(1.2 * totalPortionWeight).toFixed(1)} lbs`,
-      },
-      {
-        category: 'Proteins',
-        item: 'Top Sirloin Steak',
-        amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs`,
-      },
-      {
-        category: 'Proteins',
-        item: 'Wild Salmon Fillets',
-        amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs`,
-      },
-      { category: 'Grains & Carbs', item: 'Jasmine Rice', amount: '2 Bags' },
-      { category: 'Grains & Carbs', item: 'Brown Rice', amount: '1 Bag' },
-      { category: 'Grains & Carbs', item: 'Udon Noodles', amount: '1 Pack' },
-      { category: 'Grains & Carbs', item: 'Sweet Potatoes', amount: '4 Large' },
-      { category: 'Pantry & Sauces', item: 'Raw Honey', amount: '1 Bottle' },
-      { category: 'Pantry & Sauces', item: 'Low-Sodium Soy Sauce', amount: '1 Bottle' },
-      { category: 'Pantry & Sauces', item: 'Balsamic Vinegar & Dijon', amount: '1 Each' },
-      { category: 'Produce', item: 'Fresh Garlic & Ginger', amount: '1 Head / 1 Root' },
-      { category: 'Produce', item: 'Fresh Broccoli', amount: '3 Crowns' },
-      { category: 'Produce', item: 'Sugar Snap Peas', amount: '1 Bag' },
-    ];
+    // Grocery filtering based on vegetarian preferences
+    const mockGroceries = isVegetarian
+      ? [
+          { category: 'Proteins', item: 'Extra-Firm Tofu', amount: `${(2.0 * totalPortionWeight).toFixed(1)} lbs` },
+          { category: 'Proteins', item: 'Organic Tempeh', amount: `${(1.5 * totalPortionWeight).toFixed(1)} lbs` },
+          { category: 'Proteins', item: 'Black Beans & Chickpeas', amount: '4 Cans' },
+          { category: 'Grains & Carbs', item: 'Quinoa & Jasmine Rice', amount: '2 Bags' },
+          { category: 'Produce', item: 'Bell Peppers & Cabbage', amount: '1 Bag' },
+        ]
+      : [
+          { category: 'Proteins', item: 'Chicken Breast', amount: `${(1.5 * totalPortionWeight).toFixed(1)} lbs` },
+          { category: 'Proteins', item: 'Lean Ground Beef (93/7)', amount: `${(1.2 * totalPortionWeight).toFixed(1)} lbs` },
+          { category: 'Proteins', item: 'Top Sirloin Steak', amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs` },
+          { category: 'Proteins', item: 'Wild Salmon Fillets', amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs` },
+          { category: 'Grains & Carbs', item: 'Jasmine & Brown Rice', amount: '2 Bags' },
+          { category: 'Produce', item: 'Fresh Broccoli & Snap Peas', amount: '3 Bags' },
+        ];
 
     const mockData = {
       weeklyCalendar: mockWeeklyCalendar,
       groceries: mockGroceries,
-      estimatedGroceryCost: `$${Math.round(90 * totalPortionWeight)} – $${Math.round(140 * totalPortionWeight)} USD`,
+      estimatedGroceryCost: `$${Math.round(80 * totalPortionWeight)} – $${Math.round(130 * totalPortionWeight)} USD`,
     };
 
     return NextResponse.json(mockData);
