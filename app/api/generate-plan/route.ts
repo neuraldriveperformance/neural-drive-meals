@@ -31,30 +31,6 @@ export async function POST(req: Request) {
       Snack: 0.15,
     };
 
-    // Helper: Calculate normalized targets for active slots so they always sum to 100%
-    const calculateBalancedTargets = (activeSlots: string[]) => {
-      const totalActiveWeight = activeSlots.reduce(
-        (sum, slot) => sum + (BASE_SLOT_WEIGHTS[slot] || 0.25),
-        0
-      );
-
-      const targets: Record<string, { calories: number; protein: number }> = {};
-
-      if (totalActiveWeight === 0) return targets;
-
-      activeSlots.forEach((slot) => {
-        const slotWeight = BASE_SLOT_WEIGHTS[slot] || 0.25;
-        const normalizedRatio = slotWeight / totalActiveWeight;
-
-        targets[slot] = {
-          calories: Math.round(clientCalories * normalizedRatio),
-          protein: Math.round(clientProtein * normalizedRatio),
-        };
-      });
-
-      return targets;
-    };
-
     // 1. COMBINE ALL EXCLUSIONS AND DISLIKES
     const rawExclusions = [
       ...(clientExclusions || []),
@@ -88,8 +64,8 @@ export async function POST(req: Request) {
         type,
         calories: Math.round(cals),
         protein: Math.round(prot),
-        carbs: Math.round(baseMeal.carbs * ratio),
-        fat: Math.round(baseMeal.fat * ratio),
+        carbs: Math.round((baseMeal.carbs || 0) * ratio),
+        fat: Math.round((baseMeal.fat || 0) * ratio),
       };
     };
 
@@ -335,22 +311,81 @@ export async function POST(req: Request) {
       return NextResponse.json({ swappedMeal });
     }
 
-    // --- FULL PLAN GENERATION HANDLER WITH WEIGHTED MACRO BALANCING ---
+    // --- FULL PLAN GENERATION HANDLER WITH SELF-PREPARED MACRO BALANCING ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
       const daySchedule = weeklySchedule[day] || {};
-      
-      // Get all active slot names scheduled to generate
-      const activeSlots = Object.entries(daySchedule)
-        .filter(([_, slotData]: [string, any]) => slotData.status === 'generate')
-        .map(([type]) => type);
 
-      // Get proportional targets (Lunch gets ~46.7%, Dinner ~53.3% if only L+D are active)
-      const slotTargets = calculateBalancedTargets(activeSlots);
+      const generateSlots: string[] = [];
+      const selfPreparedSlots: { type: string; mealData: any }[] = [];
 
-      const meals = activeSlots.map((type) => {
+      // Categorize slots by generate vs self-prepared
+      Object.entries(daySchedule).forEach(([slotType, slotData]: [string, any]) => {
+        if (!slotData) return;
+
+        const isGenerate =
+          (typeof slotData === 'string' && slotData === 'generate') ||
+          (typeof slotData === 'object' && slotData?.status === 'generate');
+
+        const isSelfPrepared =
+          typeof slotData === 'object' && slotData?.status === 'self-prepared';
+
+        if (isGenerate) {
+          generateSlots.push(slotType);
+        } else if (isSelfPrepared) {
+          selfPreparedSlots.push({
+            type: slotType,
+            mealData: slotData.meal || slotData,
+          });
+        }
+      });
+
+      // Default fallback if no slots were passed for this day
+      if (generateSlots.length === 0 && selfPreparedSlots.length === 0) {
+        generateSlots.push('Lunch', 'Dinner');
+      }
+
+      // 1. Subtract fixed self-prepared macros from total daily targets
+      let remainingCalories = clientCalories;
+      let remainingProtein = clientProtein;
+
+      const preparedMealsFormatted = selfPreparedSlots.map(({ type, mealData }) => {
+        const cal = Number(mealData.calories || mealData.cals || 0);
+        const prot = Number(mealData.protein || 0);
+
+        remainingCalories -= cal;
+        remainingProtein -= prot;
+
+        return {
+          type,
+          name: mealData.name || mealData.title || `Self-Prepared ${type}`,
+          calories: cal,
+          protein: prot,
+          carbs: Number(mealData.carbs || 0),
+          fat: Number(mealData.fat || 0),
+          ingredients: mealData.ingredients || ['User-defined self-prepared meal'],
+          instructions: mealData.instructions || ['Prepared independently.'],
+          isSelfPrepared: true,
+        };
+      });
+
+      // Guard against negative balances
+      remainingCalories = Math.max(remainingCalories, 0);
+      remainingProtein = Math.max(remainingProtein, 0);
+
+      // 2. Proportionately split remaining macros among generated slots
+      const totalGenerateWeight = generateSlots.reduce(
+        (sum, slot) => sum + (BASE_SLOT_WEIGHTS[slot] || 0.25),
+        0
+      );
+
+      const generatedMeals = generateSlots.map((type) => {
+        const slotWeight = BASE_SLOT_WEIGHTS[type] || 0.25;
+        const ratio = totalGenerateWeight > 0 ? slotWeight / totalGenerateWeight : 1 / generateSlots.length;
+
+        const targetCals = Math.round(remainingCalories * ratio);
+        const targetProt = Math.round(remainingProtein * ratio);
+
         let baseMeal;
-        const target = slotTargets[type] || { calories: 600, protein: 40 };
-
         if (type === 'Lunch') {
           const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
           baseMeal = lunchPool[index];
@@ -379,10 +414,13 @@ export async function POST(req: Request) {
           };
         }
 
-        return createScaledMeal(baseMeal, target.calories, target.protein, type);
+        return createScaledMeal(baseMeal, targetCals, targetProt, type);
       });
 
-      return { day, meals };
+      // Combine both types of meals for the full daily array
+      const allMeals = [...preparedMealsFormatted, ...generatedMeals];
+
+      return { day, meals: allMeals };
     });
 
     const mockGroceries = isVegetarian
