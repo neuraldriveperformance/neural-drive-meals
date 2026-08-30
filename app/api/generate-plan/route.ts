@@ -23,7 +23,6 @@ export async function POST(req: Request) {
 
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-    // Standard baseline weights for meal slots
     const BASE_SLOT_WEIGHTS: Record<string, number> = {
       Breakfast: 0.25,
       Lunch: 0.35,
@@ -31,7 +30,7 @@ export async function POST(req: Request) {
       Snack: 0.15,
     };
 
-    // 1. COMBINE ALL EXCLUSIONS AND DISLIKES
+    // 1. EXCLUSION & ANIMAL PROTEIN PRIORITIZATION LOGIC
     const rawExclusions = [
       ...(clientExclusions || []),
       ...(household?.familyDislikes || []),
@@ -52,11 +51,9 @@ export async function POST(req: Request) {
       new Set([...exclusionsLower, ...(isVegetarian ? meatTerms : [])])
     );
 
-    // Helper function to scale meal macros accurately
     const createScaledMeal = (baseMeal: any, targetCals: number, targetProt: number, type: string) => {
       const cals = targetCals || baseMeal.calories;
       const prot = targetProt || baseMeal.protein;
-      // Proportional ratio for carbs and fat based on target calories
       const ratio = cals / (baseMeal.calories || 600);
 
       return {
@@ -69,8 +66,75 @@ export async function POST(req: Request) {
       };
     };
 
-    // 2. RECIPE POOLS
+    // 2. RECIPE POOLS (Prioritizing Animal-Based Proteins First)
     const rawLunchPool = [
+      {
+        name: 'Lean Beef & Rice Meal Prep Bowl',
+        calories: 650,
+        protein: 48,
+        carbs: 55,
+        fat: 16,
+        ingredients: [
+          '6oz 93/7 Lean Ground Beef',
+          '1 cup Cooked Brown Rice',
+          '1 cup Red & Yellow Bell Peppers (diced)',
+          '1 tsp Olive Oil',
+          '1/2 tsp Garlic Powder',
+          '1/2 tsp Onion Powder',
+          '1/4 tsp Salt & Black Pepper',
+        ],
+        instructions: [
+          'Heat olive oil in a skillet over medium-high heat.',
+          'Add ground beef, garlic powder, onion powder, salt, and pepper; brown for 6-8 minutes.',
+          'Add diced bell peppers and saute for 3-4 minutes until tender-crisp.',
+          'Divide brown rice into prep containers and top with beef mixture.',
+        ],
+        familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
+        isPlantBased: false,
+      },
+      {
+        name: 'Grilled Chicken & Quinoa Harvest Salad',
+        calories: 620,
+        protein: 52,
+        carbs: 45,
+        fat: 18,
+        ingredients: [
+          '6oz Boneless Skinless Chicken Breast',
+          '1 cup Cooked Quinoa',
+          '2 cups Mixed Salad Greens',
+          '1 tbsp Extra Virgin Olive Oil',
+          '1 tbsp Balsamic Vinegar',
+          '1/4 tsp Salt & Pepper',
+        ],
+        instructions: [
+          'Season chicken breast and grill on medium-high heat for 6-7 mins per side.',
+          'Whisk olive oil and balsamic vinegar for dressing.',
+          'Slice chicken and layer over greens and quinoa.',
+        ],
+        familyFriendlyNote: 'Keep dressing on the side for kids.',
+        isPlantBased: false,
+      },
+      {
+        name: 'Turkey Burrito Bowl with Black Beans & Salsa',
+        calories: 640,
+        protein: 45,
+        carbs: 60,
+        fat: 15,
+        ingredients: [
+          '6oz Lean Ground Turkey',
+          '1/2 cup Low-Sodium Black Beans',
+          '1 cup Cooked Jasmine Rice',
+          '3 tbsp Fresh Salsa',
+          '1/2 tsp Ground Cumin',
+        ],
+        instructions: [
+          'Brown turkey in a skillet with cumin, salt, and pepper.',
+          'Layer cooked jasmine rice, black beans, and turkey into bowls.',
+          'Top with fresh salsa.',
+        ],
+        familyFriendlyNote: 'Keep salsa separate for kids.',
+        isPlantBased: false,
+      },
       {
         name: 'Crispy Tofu & Quinoa Buddha Bowl',
         calories: 600,
@@ -113,116 +177,9 @@ export async function POST(req: Request) {
         familyFriendlyNote: 'Offer pita bread on the side for younger family members.',
         isPlantBased: true,
       },
-      {
-        name: 'Lean Beef & Rice Meal Prep Bowl',
-        calories: 650,
-        protein: 48,
-        carbs: 55,
-        fat: 16,
-        ingredients: [
-          '6oz 93/7 Lean Ground Beef',
-          '1 cup Cooked Brown Rice',
-          '1 cup Red & Yellow Bell Peppers (diced)',
-          '1 tsp Olive Oil',
-          '1/2 tsp Garlic Powder',
-          '1/2 tsp Onion Powder',
-        ],
-        instructions: [
-          'Heat olive oil in a skillet over medium-high heat.',
-          'Add ground beef, garlic powder, onion powder, salt, and pepper; brown for 6-8 minutes.',
-          'Add diced bell peppers and saute for 3-4 minutes until tender-crisp.',
-          'Divide brown rice into prep containers and top with beef mixture.',
-        ],
-        familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
-        isPlantBased: false,
-      },
-      {
-        name: 'Grilled Chicken & Quinoa Harvest Salad',
-        calories: 620,
-        protein: 52,
-        carbs: 45,
-        fat: 18,
-        ingredients: [
-          '6oz Boneless Skinless Chicken Breast',
-          '1 cup Cooked Quinoa',
-          '2 cups Mixed Salad Greens',
-          '1 tbsp Extra Virgin Olive Oil',
-          '1 tbsp Balsamic Vinegar',
-        ],
-        instructions: [
-          'Season chicken breast and grill on medium-high heat for 6-7 mins per side.',
-          'Whisk olive oil and balsamic vinegar for dressing.',
-          'Slice chicken and layer over greens and quinoa.',
-        ],
-        familyFriendlyNote: 'Keep dressing on the side for kids.',
-        isPlantBased: false,
-      },
-      {
-        name: 'Turkey Burrito Bowl with Black Beans & Salsa',
-        calories: 640,
-        protein: 45,
-        carbs: 60,
-        fat: 15,
-        ingredients: [
-          '6oz Lean Ground Turkey',
-          '1/2 cup Low-Sodium Black Beans',
-          '1 cup Cooked Jasmine Rice',
-          '3 tbsp Fresh Salsa',
-          '1/2 tsp Ground Cumin',
-        ],
-        instructions: [
-          'Brown turkey in a skillet with cumin, salt, and pepper.',
-          'Layer cooked jasmine rice, black beans, and turkey into bowls.',
-          'Top with fresh salsa.',
-        ],
-        familyFriendlyNote: 'Keep salsa separate for kids.',
-        isPlantBased: false,
-      },
     ];
 
     const rawDinnerPool = [
-      {
-        name: 'High-Protein Black Bean & Tempeh Fajitas',
-        calories: 710,
-        protein: 46,
-        carbs: 70,
-        fat: 20,
-        ingredients: [
-          '6oz Sliced Tempeh',
-          '1 cup Black Beans',
-          '2 Whole Grain Tortillas',
-          '1 cup Bell Peppers & Onions (sliced)',
-          '2 tbsp Guacamole',
-        ],
-        instructions: [
-          'Sear tempeh slices and fajita veggies in a hot skillet with taco seasoning for 6-8 mins.',
-          'Warm tortillas and layer with black beans, tempeh, and veggies.',
-          'Top with guacamole.',
-        ],
-        familyFriendlyNote: 'Assemble as DIY taco night for kids.',
-        isPlantBased: true,
-      },
-      {
-        name: 'Pan-Seared Honey Garlic Tofu & Jasmine Rice',
-        calories: 690,
-        protein: 40,
-        carbs: 75,
-        fat: 16,
-        ingredients: [
-          '8oz Firm Tofu (cubed)',
-          '1.25 cups Cooked Jasmine Rice',
-          '1 cup Steamed Broccoli',
-          '1.5 tbsp Honey Soy Glaze',
-          '1 tsp Sesame Oil',
-        ],
-        instructions: [
-          'Sear cubed tofu in sesame oil until golden on all sides.',
-          'Pour honey soy glaze over tofu and simmer until thick.',
-          'Serve glazed tofu over jasmine rice with steamed broccoli.',
-        ],
-        familyFriendlyNote: 'Serve sauce on the side for kids.',
-        isPlantBased: true,
-      },
       {
         name: 'Pan-Seared Honey Garlic Chicken & Rice',
         calories: 720,
@@ -282,9 +239,50 @@ export async function POST(req: Request) {
         familyFriendlyNote: 'Serve plain noodles and steak strips for kids.',
         isPlantBased: false,
       },
+      {
+        name: 'High-Protein Black Bean & Tempeh Fajitas',
+        calories: 710,
+        protein: 46,
+        carbs: 70,
+        fat: 20,
+        ingredients: [
+          '6oz Sliced Tempeh',
+          '1 cup Black Beans',
+          '2 Whole Grain Tortillas',
+          '1 cup Bell Peppers & Onions (sliced)',
+          '2 tbsp Guacamole',
+        ],
+        instructions: [
+          'Sear tempeh slices and fajita veggies in a hot skillet with taco seasoning for 6-8 mins.',
+          'Warm tortillas and layer with black beans, tempeh, and veggies.',
+          'Top with guacamole.',
+        ],
+        familyFriendlyNote: 'Assemble as DIY taco night for kids.',
+        isPlantBased: true,
+      },
+      {
+        name: 'Pan-Seared Honey Garlic Tofu & Jasmine Rice',
+        calories: 690,
+        protein: 40,
+        carbs: 75,
+        fat: 16,
+        ingredients: [
+          '8oz Firm Tofu (cubed)',
+          '1.25 cups Cooked Jasmine Rice',
+          '1 cup Steamed Broccoli',
+          '1.5 tbsp Honey Soy Glaze',
+          '1 tsp Sesame Oil',
+        ],
+        instructions: [
+          'Sear cubed tofu in sesame oil until golden on all sides.',
+          'Pour honey soy glaze over tofu and simmer until thick.',
+          'Serve glazed tofu over jasmine rice with steamed broccoli.',
+        ],
+        familyFriendlyNote: 'Serve sauce on the side for kids.',
+        isPlantBased: true,
+      },
     ];
 
-    // 3. STRICT EXCLUSION FILTERING
     const isMealAllowed = (meal: any) => {
       if (activeBannedTerms.length === 0) return true;
       const fullMealText = `${meal.name} ${meal.ingredients.join(' ')}`.toLowerCase();
@@ -294,8 +292,17 @@ export async function POST(req: Request) {
     let lunchPool = rawLunchPool.filter(isMealAllowed);
     let dinnerPool = rawDinnerPool.filter(isMealAllowed);
 
-    if (lunchPool.length === 0) lunchPool = rawLunchPool.filter((m) => m.isPlantBased);
-    if (dinnerPool.length === 0) dinnerPool = rawDinnerPool.filter((m) => m.isPlantBased);
+    // Prioritize Animal Proteins: If non-vegetarian, filter out plant-based meals first
+    if (!isVegetarian) {
+      const animalLunches = lunchPool.filter((m) => !m.isPlantBased);
+      if (animalLunches.length > 0) lunchPool = animalLunches;
+
+      const animalDinners = dinnerPool.filter((m) => !m.isPlantBased);
+      if (animalDinners.length > 0) dinnerPool = animalDinners;
+    }
+
+    if (lunchPool.length === 0) lunchPool = rawLunchPool;
+    if (dinnerPool.length === 0) dinnerPool = rawDinnerPool;
 
     // --- SWAP REQUEST HANDLER ---
     if (isSwapRequest && swapTarget) {
@@ -311,8 +318,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ swappedMeal });
     }
 
-    // Check if the overall weekly schedule is completely empty
     const isScheduleCompletelyEmpty = Object.keys(weeklySchedule).length === 0;
+    const allGeneratedIngredients: string[] = [];
 
     // --- FULL PLAN GENERATION HANDLER ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
@@ -321,7 +328,6 @@ export async function POST(req: Request) {
       const generateSlots: string[] = [];
       const selfPreparedSlots: { type: string; mealData: any }[] = [];
 
-      // Categorize slots based on status flags
       Object.entries(daySchedule).forEach(([slotType, slotData]: [string, any]) => {
         if (!slotData) return;
 
@@ -343,26 +349,26 @@ export async function POST(req: Request) {
         }
       });
 
-      // Global fallback ONLY if the client sent an entirely empty weekly schedule object
       if (isScheduleCompletelyEmpty) {
         generateSlots.push('Lunch', 'Dinner');
       }
 
-      // If this specific day was intentionally set to OFF everywhere, return empty meals array
       if (generateSlots.length === 0 && selfPreparedSlots.length === 0) {
         return { day, meals: [] };
       }
 
-      // 1. Subtract fixed self-provided macros from daily targets
+      // 3. REALISTIC MACRO DISTRIBUTION FOR SELF-PREPARED MEALS (40% C, 30% P, 30% F)
       let remainingCalories = clientCalories;
       let remainingProtein = clientProtein;
 
       const preparedMealsFormatted = selfPreparedSlots.map(({ type, mealData }) => {
         const fallbackCal = Math.round(clientCalories * (BASE_SLOT_WEIGHTS[type] || 0.25));
-        const fallbackProt = Math.round(clientProtein * (BASE_SLOT_WEIGHTS[type] || 0.25));
 
         const cal = Number(mealData.calories || mealData.cals) || fallbackCal;
-        const prot = Number(mealData.protein) || fallbackProt;
+        // Apply realistic 40C / 30P / 30F macros if none provided
+        const prot = Number(mealData.protein) || Math.round((cal * 0.30) / 4);
+        const carbs = Number(mealData.carbs) || Math.round((cal * 0.40) / 4);
+        const fat = Number(mealData.fat) || Math.round((cal * 0.30) / 9);
 
         remainingCalories -= cal;
         remainingProtein -= prot;
@@ -372,24 +378,23 @@ export async function POST(req: Request) {
           name: mealData.name || mealData.title || `Self-Provided ${type}`,
           calories: cal,
           protein: prot,
-          carbs: Number(mealData.carbs || 0),
-          fat: Number(mealData.fat || 0),
+          carbs: carbs,
+          fat: fat,
           ingredients: mealData.ingredients || ['Self-provided meal'],
           instructions: mealData.instructions || ['Prepared independently.'],
           isSelfPrepared: true,
         };
       });
 
-      // Guard against negative balances
       remainingCalories = Math.max(remainingCalories, 0);
       remainingProtein = Math.max(remainingProtein, 0);
 
-      // 2. Proportionately split remaining macros among requested generated slots
       const totalGenerateWeight = generateSlots.reduce(
         (sum, slot) => sum + (BASE_SLOT_WEIGHTS[slot] || 0.25),
         0
       );
 
+      // 4. VARIETY LEVEL HANDLING (High Repeat: 1/5 forces same meal every day)
       const generatedMeals = generateSlots.map((type) => {
         const slotWeight = BASE_SLOT_WEIGHTS[type] || 0.25;
         const ratio = totalGenerateWeight > 0 ? slotWeight / totalGenerateWeight : 1 / generateSlots.length;
@@ -399,62 +404,73 @@ export async function POST(req: Request) {
 
         let baseMeal;
         if (type === 'Lunch') {
-          const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
+          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
           baseMeal = lunchPool[index];
         } else if (type === 'Dinner') {
-          const index = enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
+          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
           baseMeal = dinnerPool[index];
         } else {
           baseMeal = {
-            name: isVegetarian ? 'Berry & Almond Greek Yogurt Parfait' : `Custom ${type} Protocol`,
+            name: isVegetarian ? 'Berry & Almond Greek Yogurt Parfait' : 'Egg White & Avocado Whole Grain Wrap',
             calories: 400,
             protein: 30,
             carbs: 40,
             fat: 12,
-            ingredients: [
-              '3/4 cup Low-Fat Plain Greek Yogurt',
-              '1/2 cup Mixed Fresh Berries',
-              '1 tbsp Raw Whole Almonds',
-              '1 tsp Raw Honey',
-            ],
-            instructions: [
-              'Spoon Greek yogurt into a bowl.',
-              'Top with mixed berries and chopped almonds.',
-              'Drizzle honey over the top.',
-            ],
-            familyFriendlyNote: 'Adjustable portion sizes across kids and teens.',
+            ingredients: isVegetarian
+              ? ['3/4 cup Low-Fat Plain Greek Yogurt', '1/2 cup Mixed Fresh Berries', '1 tbsp Raw Whole Almonds', '1 tsp Raw Honey']
+              : ['1/2 cup Egg Whites', '1 Whole Wheat Tortilla', '1/4 Whole Avocado', '1 tbsp Fresh Salsa', '1/4 tsp Salt & Pepper'],
+            instructions: ['Cook egg whites in skillet, wrap in tortilla with avocado, salsa, and seasonings.'],
+            familyFriendlyNote: 'Adjustable portion sizes.',
           };
         }
 
-        return createScaledMeal(baseMeal, targetCals, targetProt, type);
+        const scaledMeal = createScaledMeal(baseMeal, targetCals, targetProt, type);
+        allGeneratedIngredients.push(...scaledMeal.ingredients);
+        return scaledMeal;
       });
 
-      // Combine both types of meals for the daily array
       const allMeals = [...preparedMealsFormatted, ...generatedMeals];
-
       return { day, meals: allMeals };
     });
 
-    const mockGroceries = isVegetarian
-      ? [
-          { category: 'Proteins', item: 'Extra-Firm Tofu', amount: `${(2.0 * totalPortionWeight).toFixed(1)} lbs` },
-          { category: 'Proteins', item: 'Organic Tempeh', amount: `${(1.5 * totalPortionWeight).toFixed(1)} lbs` },
-          { category: 'Proteins', item: 'Black Beans & Chickpeas', amount: '4 Cans' },
-          { category: 'Grains & Carbs', item: 'Quinoa & Jasmine Rice', amount: '2 Bags' },
-          { category: 'Produce', item: 'Bell Peppers & Cabbage', amount: '1 Bag' },
-        ]
-      : [
-          { category: 'Proteins', item: 'Chicken Breast', amount: `${(1.5 * totalPortionWeight).toFixed(1)} lbs` },
-          { category: 'Proteins', item: 'Lean Ground Beef (93/7)', amount: `${(1.2 * totalPortionWeight).toFixed(1)} lbs` },
-          { category: 'Proteins', item: 'Top Sirloin Steak', amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs` },
-          { category: 'Proteins', item: 'Wild Salmon Fillets', amount: `${(1.0 * totalPortionWeight).toFixed(1)} lbs` },
-          { category: 'Grains & Carbs', item: 'Jasmine & Brown Rice', amount: '2 Bags' },
-          { category: 'Produce', item: 'Fresh Broccoli & Snap Peas', amount: '3 Bags' },
-        ];
+    // 5. DYNAMIC GROCERY CONSOLIDATION & CATEGORIZATION
+    const categorizeIngredient = (ingredient: string) => {
+      const lower = ingredient.toLowerCase();
+      if (meatTerms.some((t) => lower.includes(t)) || lower.includes('tofu') || lower.includes('tempeh') || lower.includes('egg') || lower.includes('yogurt')) {
+        return 'Proteins';
+      }
+      if (lower.includes('rice') || lower.includes('quinoa') || lower.includes('tortilla') || lower.includes('noodle') || lower.includes('bread') || lower.includes('potato')) {
+        return 'Grains & Carbs';
+      }
+      if (lower.includes('pepper') || lower.includes('cabbage') || lower.includes('greens') || lower.includes('cucumber') || lower.includes('broccoli') || lower.includes('asparagus') || lower.includes('peas') || lower.includes('berries') || lower.includes('avocado')) {
+        return 'Produce';
+      }
+      return 'Condiments & Seasonings';
+    };
+
+    const groupedGroceries: Record<string, Set<string>> = {
+      'Proteins': new Set(),
+      'Grains & Carbs': new Set(),
+      'Produce': new Set(),
+      'Condiments & Seasonings': new Set(),
+    };
+
+    allGeneratedIngredients.forEach((item) => {
+      const category = categorizeIngredient(item);
+      groupedGroceries[category].add(item);
+    });
+
+    const consolidatedGroceries = Object.entries(groupedGroceries).flatMap(([category, items]) =>
+      Array.from(items).map((item) => ({
+        category,
+        item,
+        amount: `Scaled x${totalPortionWeight.toFixed(1)}`,
+      }))
+    );
 
     const mockData = {
       weeklyCalendar: mockWeeklyCalendar,
-      groceries: mockGroceries,
+      groceries: consolidatedGroceries,
       estimatedGroceryCost: `$${Math.round(80 * totalPortionWeight)} – $${Math.round(130 * totalPortionWeight)} USD`,
     };
 
