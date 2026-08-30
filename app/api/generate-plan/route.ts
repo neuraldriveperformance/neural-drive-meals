@@ -105,32 +105,44 @@ export async function POST(req: Request) {
         scaleIngredientString(ing, combinedMultiplier)
       );
 
+      // Dynamically calculate balanced carbs and fats relative to total calories
+      const proteinCals = prot * 4;
+      const remainingCals = Math.max(cals - proteinCals, 0);
+      
+      const targetCarbs = isKeto
+        ? Math.round((baseMeal.carbs || 10) * calorieRatio)
+        : Math.round((remainingCals * 0.55) / 4);
+      
+      const targetFat = isKeto
+        ? Math.round((cals - proteinCals - (targetCarbs * 4)) / 9)
+        : Math.round((remainingCals * 0.45) / 9);
+
       return {
         ...baseMeal,
         type,
         calories: Math.round(cals),
         protein: Math.round(prot),
-        carbs: Math.round((baseMeal.carbs || 0) * calorieRatio),
-        fat: Math.round((baseMeal.fat || 0) * calorieRatio),
+        carbs: Math.max(targetCarbs, 0),
+        fat: Math.max(targetFat, 0),
         ingredients: scaledIngredients,
         rawIngredients: baseMeal.ingredients,
-        ...(bulkPrepActive && {
-          bulkPrepNote: "Note: Ingredient quantities listed above represent the full batch required for your weekly bulk prep.",
-        }),
+        bulkPrepNote: bulkPrepActive
+          ? "Note: Ingredient quantities listed above represent the full batch required for your weekly bulk prep."
+          : null,
       };
     };
 
-    // 2. RECIPE POOLS WITH DIETARY FLAGS
+    // 2. RECIPE POOLS WITH DIETARY FLAGS & GF COMPATIBILITY
     const rawLunchPool = [
       {
-        name: 'Lean Beef & Rice Meal Prep Bowl',
+        name: 'Lean Beef & Jasmine Rice Meal Prep Bowl',
         calories: 650,
         protein: 48,
         carbs: 55,
         fat: 16,
         ingredients: [
           '6oz 93/7 Lean Ground Beef',
-          '1 cup Cooked Brown Rice',
+          '1 cup Cooked Jasmine Rice',
           '1 cup Red & Yellow Bell Peppers (diced)',
           '1 tsp Olive Oil',
           '1/2 tsp Garlic Powder',
@@ -141,7 +153,7 @@ export async function POST(req: Request) {
           'Heat olive oil in a skillet over medium-high heat.',
           'Add ground beef, garlic powder, onion powder, salt, and pepper; brown for 6-8 minutes.',
           'Add diced bell peppers and saute for 3-4 minutes until tender-crisp.',
-          'Divide brown rice into prep containers and top with beef mixture.',
+          'Divide rice into prep containers and top with beef mixture.',
         ],
         familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
         isPlantBased: false,
@@ -156,19 +168,19 @@ export async function POST(req: Request) {
         name: 'Grilled Chicken & Quinoa Harvest Salad',
         calories: 620,
         protein: 52,
-        carbs: 45,
-        fat: 18,
+        carbs: 50,
+        fat: 16,
         ingredients: [
           '6oz Boneless Skinless Chicken Breast',
           '1 cup Cooked Quinoa',
-          '2 cups Mixed Salad Greens',
+          '2 cups Mixed Greens',
           '1 tbsp Extra Virgin Olive Oil',
-          '1 tbsp Balsamic Vinegar',
+          '1 tbsp Apple Cider Vinegar',
           '1/4 tsp Salt & Pepper',
         ],
         instructions: [
           'Season chicken breast and grill on medium-high heat for 6-7 mins per side.',
-          'Whisk olive oil and balsamic vinegar for dressing.',
+          'Whisk olive oil and apple cider vinegar for dressing.',
           'Slice chicken and layer over greens and quinoa.',
         ],
         familyFriendlyNote: 'Keep dressing on the side for kids.',
@@ -214,16 +226,16 @@ export async function POST(req: Request) {
         carbs: 60,
         fat: 18,
         ingredients: [
-          '7oz Extra-Firm Tofu (cubed & baked)',
+          '7oz Extra-Firm Tofu (cubed)',
           '1 cup Cooked Quinoa',
           '1/2 cup Edamame Beans',
           '1 cup Shredded Purple Cabbage',
-          '1 tbsp Peanut Butter Dressing',
+          '1 tbsp Gluten-Free Tamari Dressing',
         ],
         instructions: [
-          'Press and cube tofu, season with soy sauce and cornstarch, and bake at 400°F for 20 mins until crisp.',
+          'Press and cube tofu, season with tamari, and bake at 400°F for 20 mins until crisp.',
           'Assemble bowl with quinoa, edamame, cabbage, and baked tofu.',
-          'Drizzle peanut butter dressing on top.',
+          'Drizzle tamari dressing on top.',
         ],
         familyFriendlyNote: 'Serve dressing on the side for kids.',
         isPlantBased: true,
@@ -252,7 +264,7 @@ export async function POST(req: Request) {
           'Whisk tahini, lemon juice, garlic, and water for dressing.',
           'Toss salad with dressing right before serving.',
         ],
-        familyFriendlyNote: 'Offer pita bread on the side for younger family members.',
+        familyFriendlyNote: 'Offer gluten-free crackers on the side for younger family members.',
         isPlantBased: true,
         isVegan: true,
         isGlutenFree: true,
@@ -265,61 +277,64 @@ export async function POST(req: Request) {
 
     const rawDinnerPool = [
       {
-        name: 'Sheet Pan Wild Salmon & Roasted Asparagus',
-        calories: 680,
-        protein: 52,
-        carbs: 10,
-        fat: 46,
-        ingredients: [
-          '7oz Wild Salmon Fillet',
-          '12 Fresh Asparagus Spears',
-          '1.5 tbsp Olive Oil',
-          '1 tbsp Lemon Juice',
-          '1/2 tsp Garlic Salt & Black Pepper',
-        ],
-        instructions: [
-          'Place salmon and asparagus on a baking sheet.',
-          'Drizzle with olive oil, lemon juice, garlic salt, and pepper.',
-          'Bake at 400°F for 12-15 mins until salmon flakes with a fork.',
-        ],
-        familyFriendlyNote: 'Flake salmon for younger kids.',
-        isPlantBased: false,
-        isVegan: false,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: true,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'Pan-Seared Honey Garlic Chicken & Rice',
+        name: 'Gluten-Free Honey Garlic Chicken & Sweet Potato',
         calories: 720,
         protein: 55,
         carbs: 65,
         fat: 18,
         ingredients: [
           '7oz Boneless Skinless Chicken Breast',
-          '1.25 cups Cooked Jasmine Rice',
+          '1.5 cups Diced Sweet Potatoes (roasted)',
           '1 cup Steamed Broccoli Florets',
           '1.5 tbsp Raw Honey',
-          '1 tbsp Low-Sodium Soy Sauce',
+          '1 tbsp Gluten-Free Tamari',
         ],
         instructions: [
+          'Toss sweet potatoes in olive oil and roast at 400°F for 25 mins.',
           'Sear seasoned chicken breast in a skillet until golden.',
-          'Pour honey and soy sauce over chicken and simmer until glaze thickens.',
-          'Serve with jasmine rice and steamed broccoli.',
+          'Pour honey and gluten-free tamari over chicken and simmer until glaze thickens.',
+          'Serve chicken with roasted sweet potatoes and steamed broccoli.',
         ],
         familyFriendlyNote: 'Deconstruct for children without extra glaze.',
         isPlantBased: false,
         isVegan: false,
-        isGlutenFree: false,
+        isGlutenFree: true,
         isDairyFree: true,
         isKeto: false,
         isHalal: true,
         isKosher: true,
       },
       {
-        name: 'High-Protein Black Bean & Tempeh Fajitas',
+        name: 'Sheet Pan Salmon with Sweet Potatoes & Asparagus',
+        calories: 700,
+        protein: 52,
+        carbs: 55,
+        fat: 22,
+        ingredients: [
+          '7oz Wild Salmon Fillet',
+          '1 cup Cubed Sweet Potatoes',
+          '10 Fresh Asparagus Spears',
+          '1.5 tbsp Olive Oil',
+          '1 tbsp Lemon Juice',
+          '1/2 tsp Garlic Salt & Black Pepper',
+        ],
+        instructions: [
+          'Roast sweet potato cubes at 400°F for 15 minutes first.',
+          'Add salmon and asparagus to the sheet pan.',
+          'Drizzle everything with olive oil, lemon juice, garlic salt, and pepper.',
+          'Bake for an additional 12-15 mins until salmon flakes and potatoes are tender.',
+        ],
+        familyFriendlyNote: 'Flake salmon for younger kids.',
+        isPlantBased: false,
+        isVegan: false,
+        isGlutenFree: true,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
+      },
+      {
+        name: 'High-Protein Black Bean & Tempeh Bowl',
         calories: 710,
         protein: 46,
         carbs: 70,
@@ -327,26 +342,26 @@ export async function POST(req: Request) {
         ingredients: [
           '6oz Sliced Tempeh',
           '1 cup Black Beans',
-          '2 Whole Grain Tortillas',
+          '1 cup Cooked Brown Rice',
           '1 cup Bell Peppers & Onions (sliced)',
           '2 tbsp Guacamole',
         ],
         instructions: [
           'Sear tempeh slices and fajita veggies in a hot skillet with taco seasoning for 6-8 mins.',
-          'Warm tortillas and layer with black beans, tempeh, and veggies.',
+          'Layer brown rice with black beans, tempeh, and veggies in a bowl.',
           'Top with guacamole.',
         ],
-        familyFriendlyNote: 'Assemble as DIY taco night for kids.',
+        familyFriendlyNote: 'Assemble as DIY taco bowl night for kids.',
         isPlantBased: true,
         isVegan: true,
-        isGlutenFree: false,
+        isGlutenFree: true,
         isDairyFree: true,
         isKeto: false,
         isHalal: true,
         isKosher: true,
       },
       {
-        name: 'Pan-Seared Honey Garlic Tofu & Jasmine Rice',
+        name: 'Pan-Seared Honey Tamari Tofu & Jasmine Rice',
         calories: 690,
         protein: 40,
         carbs: 75,
@@ -355,18 +370,18 @@ export async function POST(req: Request) {
           '8oz Firm Tofu (cubed)',
           '1.25 cups Cooked Jasmine Rice',
           '1 cup Steamed Broccoli',
-          '1.5 tbsp Honey Soy Glaze',
+          '1.5 tbsp Honey Tamari Glaze',
           '1 tsp Sesame Oil',
         ],
         instructions: [
           'Sear cubed tofu in sesame oil until golden on all sides.',
-          'Pour honey soy glaze over tofu and simmer until thick.',
+          'Pour honey tamari glaze over tofu and simmer until thick.',
           'Serve glazed tofu over jasmine rice with steamed broccoli.',
         ],
         familyFriendlyNote: 'Serve sauce on the side for kids.',
         isPlantBased: true,
         isVegan: true,
-        isGlutenFree: false,
+        isGlutenFree: true,
         isDairyFree: true,
         isKeto: false,
         isHalal: true,
@@ -511,6 +526,7 @@ export async function POST(req: Request) {
           ingredients: mealData.ingredients || ['Self-provided meal'],
           instructions: mealData.instructions || ['Prepared independently.'],
           isSelfPrepared: true,
+          bulkPrepNote: null,
         };
       });
 
@@ -541,15 +557,15 @@ export async function POST(req: Request) {
             name: isVegan ? 'Berry & Chia Oat Bowl' : 'Egg White & Avocado Wrap',
             calories: 400,
             protein: 30,
-            carbs: 40,
+            carbs: 45,
             fat: 12,
             ingredients: isVegan
-              ? ['1/2 cup Rolled Oats', '1 tbsp Chia Seeds', '1/2 cup Mixed Fresh Berries', '1 cup Unsweetened Almond Milk']
-              : ['1/2 cup Egg Whites', '1 Whole Wheat Tortilla', '1/4 Whole Avocado', '1 tbsp Fresh Salsa', '1/4 tsp Salt & Pepper'],
+              ? ['1/2 cup Gluten-Free Rolled Oats', '1 tbsp Chia Seeds', '1/2 cup Mixed Fresh Berries', '1 cup Unsweetened Almond Milk']
+              : ['1/2 cup Egg Whites', '1 Gluten-Free Tortilla', '1/4 Whole Avocado', '1 tbsp Fresh Salsa', '1/4 tsp Salt & Pepper'],
             instructions: ['Combine ingredients in a bowl or wrap into tortilla and serve.'],
             familyFriendlyNote: 'Adjustable portion sizes.',
             isVegan: isVegan,
-            isGlutenFree: false,
+            isGlutenFree: true,
             isDairyFree: true,
             isKeto: false,
             isHalal: true,
@@ -588,7 +604,7 @@ export async function POST(req: Request) {
       if (meatTerms.some((t) => lower.includes(t)) || lower.includes('tofu') || lower.includes('tempeh') || lower.includes('egg') || lower.includes('yogurt')) {
         return 'Proteins';
       }
-      if (lower.includes('rice') || lower.includes('quinoa') || lower.includes('tortilla') || lower.includes('noodle') || lower.includes('bread') || lower.includes('potato')) {
+      if (lower.includes('rice') || lower.includes('quinoa') || lower.includes('tortilla') || lower.includes('noodle') || lower.includes('bread') || lower.includes('potato') || lower.includes('oats')) {
         return 'Grains & Carbs';
       }
       if (lower.includes('pepper') || lower.includes('cabbage') || lower.includes('greens') || lower.includes('cucumber') || lower.includes('broccoli') || lower.includes('asparagus') || lower.includes('peas') || lower.includes('berries') || lower.includes('avocado')) {
