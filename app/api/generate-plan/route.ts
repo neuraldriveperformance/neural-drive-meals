@@ -49,25 +49,42 @@ export async function POST(req: Request) {
       });
     };
 
-    // 1. EXCLUSION & ANIMAL PROTEIN PRIORITIZATION LOGIC
+    // 1. EXCLUSION & DIETARY RESTRICTION LOGIC
     const rawExclusions = [
       ...(clientExclusions || []),
       ...(household?.familyDislikes || []),
     ].filter(Boolean);
 
-    const exclusionsLower = rawExclusions.map((e) => e.toLowerCase());
+    const exclusionsLower = rawExclusions.map((e) => e.toLowerCase().trim());
 
-    const isVegetarian = exclusionsLower.some(
-      (e) => e.includes('vegetarian') || e.includes('vegan') || e.includes('no meat')
+    // Extract designated global dietary restrictions
+    const isVegan = exclusionsLower.some((e) => e.includes('vegan'));
+    const isVegetarian = isVegan || exclusionsLower.some(
+      (e) => e.includes('vegetarian') || e.includes('no meat')
     );
+    const isGlutenFree = exclusionsLower.some((e) => e.includes('gluten'));
+    const isDairyFree = isVegan || exclusionsLower.some((e) => e.includes('dairy'));
+    const isKeto = exclusionsLower.some((e) => e.includes('keto') || e.includes('low carb') || e.includes('low-carb'));
+    const isHalal = exclusionsLower.some((e) => e.includes('halal'));
+    const isKosher = exclusionsLower.some((e) => e.includes('kosher'));
 
     const meatTerms = [
       'beef', 'chicken', 'turkey', 'pork', 'salmon', 'fish', 'steak', 'meat',
       'poultry', 'shrimp', 'tuna', 'cod', 'seafood', 'bacon'
     ];
 
+    // Exclude dietary flags from direct string matching to avoid false positives
+    const dietaryFlags = [
+      'gluten-free', 'gluten free', 'dairy-free', 'dairy free',
+      'vegetarian', 'vegan', 'no meat', 'keto', 'low carb', 'low-carb',
+      'halal', 'kosher'
+    ];
+
     const activeBannedTerms = Array.from(
-      new Set([...exclusionsLower, ...(isVegetarian ? meatTerms : [])])
+      new Set([
+        ...exclusionsLower.filter((term) => !dietaryFlags.some((flag) => term.includes(flag))),
+        ...(isVegetarian ? meatTerms : []),
+      ])
     );
 
     const createScaledMeal = (
@@ -75,12 +92,12 @@ export async function POST(req: Request) {
       targetCals: number,
       targetProt: number,
       type: string,
-      portionMultiplier: number = 1.0
+      portionMultiplier: number = 1.0,
+      bulkPrepActive: boolean = false
     ) => {
       const cals = targetCals || baseMeal.calories;
       const prot = targetProt || baseMeal.protein;
       
-      // Calculate ratio to scale ingredient quantities to match actual target calories
       const calorieRatio = cals / (baseMeal.calories || 600);
       const combinedMultiplier = calorieRatio * portionMultiplier;
 
@@ -97,10 +114,13 @@ export async function POST(req: Request) {
         fat: Math.round((baseMeal.fat || 0) * calorieRatio),
         ingredients: scaledIngredients,
         rawIngredients: baseMeal.ingredients,
+        ...(bulkPrepActive && {
+          bulkPrepNote: "Note: Ingredient quantities listed above represent the full batch required for your weekly bulk prep.",
+        }),
       };
     };
 
-    // 2. RECIPE POOLS
+    // 2. RECIPE POOLS WITH DIETARY FLAGS
     const rawLunchPool = [
       {
         name: 'Lean Beef & Rice Meal Prep Bowl',
@@ -125,6 +145,12 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
         isPlantBased: false,
+        isVegan: false,
+        isGlutenFree: true,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
       {
         name: 'Grilled Chicken & Quinoa Harvest Salad',
@@ -147,27 +173,39 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Keep dressing on the side for kids.',
         isPlantBased: false,
+        isVegan: false,
+        isGlutenFree: true,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
       {
-        name: 'Turkey Burrito Bowl with Black Beans & Salsa',
-        calories: 640,
-        protein: 45,
-        carbs: 60,
-        fat: 15,
+        name: 'Keto Steak & Avocado Bowl',
+        calories: 680,
+        protein: 50,
+        carbs: 8,
+        fat: 48,
         ingredients: [
-          '6oz Lean Ground Turkey',
-          '1/2 cup Low-Sodium Black Beans',
-          '1 cup Cooked Jasmine Rice',
-          '3 tbsp Fresh Salsa',
-          '1/2 tsp Ground Cumin',
+          '7oz Grilled Top Sirloin Steak',
+          '1 Whole Avocado (sliced)',
+          '2 cups Spinach & Wild Greens',
+          '2 tbsp Olive Oil Dressing',
+          '1/4 cup Shredded Cheddar',
         ],
         instructions: [
-          'Brown turkey in a skillet with cumin, salt, and pepper.',
-          'Layer cooked jasmine rice, black beans, and turkey into bowls.',
-          'Top with fresh salsa.',
+          'Grill sirloin to preferred doneness and slice.',
+          'Serve over greens with sliced avocado and shredded cheddar.',
+          'Drizzle with olive oil dressing.',
         ],
-        familyFriendlyNote: 'Keep salsa separate for kids.',
+        familyFriendlyNote: 'Keep cheese separate if needed.',
         isPlantBased: false,
+        isVegan: false,
+        isGlutenFree: true,
+        isDairyFree: false,
+        isKeto: true,
+        isHalal: true,
+        isKosher: false,
       },
       {
         name: 'Crispy Tofu & Quinoa Buddha Bowl',
@@ -189,6 +227,12 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Serve dressing on the side for kids.',
         isPlantBased: true,
+        isVegan: true,
+        isGlutenFree: true,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
       {
         name: 'Chickpea & Lentil Power Salad with Lemon Tahini',
@@ -210,10 +254,43 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Offer pita bread on the side for younger family members.',
         isPlantBased: true,
+        isVegan: true,
+        isGlutenFree: true,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
     ];
 
     const rawDinnerPool = [
+      {
+        name: 'Sheet Pan Wild Salmon & Roasted Asparagus',
+        calories: 680,
+        protein: 52,
+        carbs: 10,
+        fat: 46,
+        ingredients: [
+          '7oz Wild Salmon Fillet',
+          '12 Fresh Asparagus Spears',
+          '1.5 tbsp Olive Oil',
+          '1 tbsp Lemon Juice',
+          '1/2 tsp Garlic Salt & Black Pepper',
+        ],
+        instructions: [
+          'Place salmon and asparagus on a baking sheet.',
+          'Drizzle with olive oil, lemon juice, garlic salt, and pepper.',
+          'Bake at 400°F for 12-15 mins until salmon flakes with a fork.',
+        ],
+        familyFriendlyNote: 'Flake salmon for younger kids.',
+        isPlantBased: false,
+        isVegan: false,
+        isGlutenFree: true,
+        isDairyFree: true,
+        isKeto: true,
+        isHalal: true,
+        isKosher: true,
+      },
       {
         name: 'Pan-Seared Honey Garlic Chicken & Rice',
         calories: 720,
@@ -234,44 +311,12 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Deconstruct for children without extra glaze.',
         isPlantBased: false,
-      },
-      {
-        name: 'Sheet Pan Wild Salmon & Roasted Sweet Potatoes',
-        calories: 700,
-        protein: 50,
-        carbs: 50,
-        fat: 24,
-        ingredients: [
-          '6oz Wild Salmon Fillet',
-          '1.5 cups Sweet Potato Cubes',
-          '10 Fresh Asparagus Spears',
-          '1 tbsp Olive Oil',
-        ],
-        instructions: [
-          'Roast sweet potatoes at 400°F for 10 mins.',
-          'Add salmon and asparagus, bake 12-15 mins more until salmon flakes.',
-        ],
-        familyFriendlyNote: 'Flake salmon into bite-size pieces for kids.',
-        isPlantBased: false,
-      },
-      {
-        name: 'Lean Beef Stir-Fry with Snap Peas & Noodles',
-        calories: 740,
-        protein: 52,
-        carbs: 70,
-        fat: 18,
-        ingredients: [
-          '6oz Top Sirloin Steak (sliced)',
-          '2 cups Cooked Udon Noodles',
-          '1 cup Sugar Snap Peas',
-          '1.5 tbsp Low-Sodium Soy Sauce',
-        ],
-        instructions: [
-          'Sear beef strips in a hot wok for 2-3 mins.',
-          'Add snap peas, noodles, and soy sauce, tossing for 2 mins.',
-        ],
-        familyFriendlyNote: 'Serve plain noodles and steak strips for kids.',
-        isPlantBased: false,
+        isVegan: false,
+        isGlutenFree: false,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
       {
         name: 'High-Protein Black Bean & Tempeh Fajitas',
@@ -293,6 +338,12 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Assemble as DIY taco night for kids.',
         isPlantBased: true,
+        isVegan: true,
+        isGlutenFree: false,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
       {
         name: 'Pan-Seared Honey Garlic Tofu & Jasmine Rice',
@@ -314,10 +365,24 @@ export async function POST(req: Request) {
         ],
         familyFriendlyNote: 'Serve sauce on the side for kids.',
         isPlantBased: true,
+        isVegan: true,
+        isGlutenFree: false,
+        isDairyFree: true,
+        isKeto: false,
+        isHalal: true,
+        isKosher: true,
       },
     ];
 
+    // 3. DIETARY RULE CHECKING
     const isMealAllowed = (meal: any) => {
+      if (isVegan && meal.isVegan === false) return false;
+      if (isGlutenFree && meal.isGlutenFree === false) return false;
+      if (isDairyFree && meal.isDairyFree === false) return false;
+      if (isKeto && meal.isKeto === false) return false;
+      if (isHalal && meal.isHalal === false) return false;
+      if (isKosher && meal.isKosher === false) return false;
+
       if (activeBannedTerms.length === 0) return true;
       const fullMealText = `${meal.name} ${meal.ingredients.join(' ')}`.toLowerCase();
       return !activeBannedTerms.some((term) => fullMealText.includes(term.trim()));
@@ -346,7 +411,8 @@ export async function POST(req: Request) {
         swapTarget.targetCalories || 700,
         swapTarget.targetProtein || 50,
         swapTarget.type,
-        totalPortionWeight
+        totalPortionWeight,
+        enableBulkPrep
       );
 
       return NextResponse.json({ swappedMeal });
@@ -472,26 +538,31 @@ export async function POST(req: Request) {
           baseMeal = dinnerPool[index];
         } else {
           baseMeal = {
-            name: isVegetarian ? 'Berry & Almond Greek Yogurt Parfait' : 'Egg White & Avocado Whole Grain Wrap',
+            name: isVegan ? 'Berry & Chia Oat Bowl' : 'Egg White & Avocado Wrap',
             calories: 400,
             protein: 30,
             carbs: 40,
             fat: 12,
-            ingredients: isVegetarian
-              ? ['3/4 cup Low-Fat Plain Greek Yogurt', '1/2 cup Mixed Fresh Berries', '1 tbsp Raw Whole Almonds', '1 tsp Raw Honey']
+            ingredients: isVegan
+              ? ['1/2 cup Rolled Oats', '1 tbsp Chia Seeds', '1/2 cup Mixed Fresh Berries', '1 cup Unsweetened Almond Milk']
               : ['1/2 cup Egg Whites', '1 Whole Wheat Tortilla', '1/4 Whole Avocado', '1 tbsp Fresh Salsa', '1/4 tsp Salt & Pepper'],
-            instructions: ['Cook egg whites in skillet, wrap in tortilla with avocado, salsa, and seasonings.'],
+            instructions: ['Combine ingredients in a bowl or wrap into tortilla and serve.'],
             familyFriendlyNote: 'Adjustable portion sizes.',
+            isVegan: isVegan,
+            isGlutenFree: false,
+            isDairyFree: true,
+            isKeto: false,
+            isHalal: true,
+            isKosher: true,
           };
         }
 
         const occurrences = mealOccurrences[baseMeal.name] || 1;
         const cardMultiplier = enableBulkPrep ? occurrences * totalPortionWeight : totalPortionWeight;
 
-        const scaledMeal = createScaledMeal(baseMeal, targetCals, targetProt, type, cardMultiplier);
+        const scaledMeal = createScaledMeal(baseMeal, targetCals, targetProt, type, cardMultiplier, enableBulkPrep);
 
         if (enableBulkPrep) {
-          // Add the fully bulk-scaled ingredient strings directly to the aggregator once per distinct meal name
           if (!mealOccurrences[`added_${baseMeal.name}`]) {
             scaledMeal.ingredients.forEach((ing: string) => {
               ingredientAggregator[ing] = 1;
@@ -499,7 +570,6 @@ export async function POST(req: Request) {
             mealOccurrences[`added_${baseMeal.name}`] = 1;
           }
         } else {
-          // Standard daily prep: track single-portion ingredients and accumulate day counts
           scaledMeal.ingredients.forEach((ing: string) => {
             ingredientAggregator[ing] = (ingredientAggregator[ing] || 0) + 1;
           });
