@@ -30,6 +30,25 @@ export async function POST(req: Request) {
       Snack: 0.15,
     };
 
+    // --- HELPER: MATH PARSER & INGREDIENT SCALER ---
+    const scaleIngredientString = (ingredient: string, multiplier: number) => {
+      if (multiplier === 1) return ingredient;
+
+      return ingredient.replace(/^(\d+(?:\.\d+)?(?:\/\d+)?)/, (match) => {
+        let num = 0;
+        if (match.includes('/')) {
+          const [n, d] = match.split('/');
+          num = parseFloat(n) / parseFloat(d);
+        } else {
+          num = parseFloat(match);
+        }
+        const scaled = num * multiplier;
+        return Number.isInteger(scaled)
+          ? scaled.toString()
+          : parseFloat(scaled.toFixed(2)).toString();
+      });
+    };
+
     // 1. EXCLUSION & ANIMAL PROTEIN PRIORITIZATION LOGIC
     const rawExclusions = [
       ...(clientExclusions || []),
@@ -51,10 +70,20 @@ export async function POST(req: Request) {
       new Set([...exclusionsLower, ...(isVegetarian ? meatTerms : [])])
     );
 
-    const createScaledMeal = (baseMeal: any, targetCals: number, targetProt: number, type: string) => {
+    const createScaledMeal = (
+      baseMeal: any,
+      targetCals: number,
+      targetProt: number,
+      type: string,
+      portionMultiplier: number = 1.0
+    ) => {
       const cals = targetCals || baseMeal.calories;
       const prot = targetProt || baseMeal.protein;
       const ratio = cals / (baseMeal.calories || 600);
+
+      const scaledIngredients = baseMeal.ingredients.map((ing: string) =>
+        scaleIngredientString(ing, portionMultiplier)
+      );
 
       return {
         ...baseMeal,
@@ -63,10 +92,12 @@ export async function POST(req: Request) {
         protein: Math.round(prot),
         carbs: Math.round((baseMeal.carbs || 0) * ratio),
         fat: Math.round((baseMeal.fat || 0) * ratio),
+        ingredients: scaledIngredients,
+        rawIngredients: baseMeal.ingredients,
       };
     };
 
-    // 2. RECIPE POOLS (Prioritizing Animal-Based Proteins First)
+    // 2. RECIPE POOLS
     const rawLunchPool = [
       {
         name: 'Lean Beef & Rice Meal Prep Bowl',
@@ -292,7 +323,6 @@ export async function POST(req: Request) {
     let lunchPool = rawLunchPool.filter(isMealAllowed);
     let dinnerPool = rawDinnerPool.filter(isMealAllowed);
 
-    // Prioritize Animal Proteins: If non-vegetarian, filter out plant-based meals first
     if (!isVegetarian) {
       const animalLunches = lunchPool.filter((m) => !m.isPlantBased);
       if (animalLunches.length > 0) lunchPool = animalLunches;
@@ -312,14 +342,46 @@ export async function POST(req: Request) {
         pool[randomIndex],
         swapTarget.targetCalories || 700,
         swapTarget.targetProtein || 50,
-        swapTarget.type
+        swapTarget.type,
+        totalPortionWeight
       );
 
       return NextResponse.json({ swappedMeal });
     }
 
     const isScheduleCompletelyEmpty = Object.keys(weeklySchedule).length === 0;
-    const allGeneratedIngredients: string[] = [];
+
+    // PRE-PASS: COUNT OCCURRENCES OF EACH MEAL ACROSS THE WEEK
+    const mealOccurrences: Record<string, number> = {};
+
+    days.forEach((day, dayIndex) => {
+      const daySchedule = weeklySchedule[day] || {};
+      const generateSlots: string[] = [];
+
+      Object.entries(daySchedule).forEach(([slotType, slotData]: [string, any]) => {
+        if (!slotData) return;
+        const statusLower = (typeof slotData === 'string' ? slotData : slotData?.status || '').toLowerCase();
+        if (statusLower === 'generate') generateSlots.push(slotType);
+      });
+
+      if (isScheduleCompletelyEmpty) generateSlots.push('Lunch', 'Dinner');
+
+      generateSlots.forEach((type) => {
+        let baseMeal;
+        if (type === 'Lunch') {
+          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
+          baseMeal = lunchPool[index];
+        } else if (type === 'Dinner') {
+          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
+          baseMeal = dinnerPool[index];
+        }
+        if (baseMeal) {
+          mealOccurrences[baseMeal.name] = (mealOccurrences[baseMeal.name] || 0) + 1;
+        }
+      });
+    });
+
+    const ingredientAggregator: Record<string, number> = {};
 
     // --- FULL PLAN GENERATION HANDLER ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
@@ -336,8 +398,7 @@ export async function POST(req: Request) {
         ).toLowerCase();
 
         const isGenerate = statusLower === 'generate';
-        const isSelfProvided =
-          statusLower.includes('self') || statusLower.includes('custom');
+        const isSelfProvided = statusLower.includes('self') || statusLower.includes('custom');
 
         if (isGenerate) {
           generateSlots.push(slotType);
@@ -357,7 +418,6 @@ export async function POST(req: Request) {
         return { day, meals: [] };
       }
 
-      // 3. REALISTIC MACRO DISTRIBUTION FOR SELF-PREPARED MEALS (40% C, 30% P, 30% F)
       let remainingCalories = clientCalories;
       let remainingProtein = clientProtein;
 
@@ -365,7 +425,6 @@ export async function POST(req: Request) {
         const fallbackCal = Math.round(clientCalories * (BASE_SLOT_WEIGHTS[type] || 0.25));
 
         const cal = Number(mealData.calories || mealData.cals) || fallbackCal;
-        // Apply realistic 40C / 30P / 30F macros if none provided
         const prot = Number(mealData.protein) || Math.round((cal * 0.30) / 4);
         const carbs = Number(mealData.carbs) || Math.round((cal * 0.40) / 4);
         const fat = Number(mealData.fat) || Math.round((cal * 0.30) / 9);
@@ -394,7 +453,6 @@ export async function POST(req: Request) {
         0
       );
 
-      // 4. VARIETY LEVEL HANDLING (High Repeat: 1/5 forces same meal every day)
       const generatedMeals = generateSlots.map((type) => {
         const slotWeight = BASE_SLOT_WEIGHTS[type] || 0.25;
         const ratio = totalGenerateWeight > 0 ? slotWeight / totalGenerateWeight : 1 / generateSlots.length;
@@ -424,16 +482,24 @@ export async function POST(req: Request) {
           };
         }
 
-        const scaledMeal = createScaledMeal(baseMeal, targetCals, targetProt, type);
-        allGeneratedIngredients.push(...scaledMeal.ingredients);
-        return scaledMeal;
+        const occurrences = mealOccurrences[baseMeal.name] || 1;
+        const cardMultiplier = enableBulkPrep ? occurrences * totalPortionWeight : totalPortionWeight;
+
+        // Collect ingredient totals for grocery sum
+        baseMeal.ingredients.forEach((ing: string) => {
+          const scaleAmount = totalPortionWeight;
+          const scaledIng = scaleIngredientString(ing, scaleAmount);
+          ingredientAggregator[scaledIng] = (ingredientAggregator[scaledIng] || 0) + 1;
+        });
+
+        return createScaledMeal(baseMeal, targetCals, targetProt, type, cardMultiplier);
       });
 
       const allMeals = [...preparedMealsFormatted, ...generatedMeals];
       return { day, meals: allMeals };
     });
 
-    // 5. DYNAMIC GROCERY CONSOLIDATION & CATEGORIZATION
+    // 5. GROCERY CONSOLIDATION & CATEGORIZATION
     const categorizeIngredient = (ingredient: string) => {
       const lower = ingredient.toLowerCase();
       if (meatTerms.some((t) => lower.includes(t)) || lower.includes('tofu') || lower.includes('tempeh') || lower.includes('egg') || lower.includes('yogurt')) {
@@ -448,23 +514,22 @@ export async function POST(req: Request) {
       return 'Condiments & Seasonings';
     };
 
-    const groupedGroceries: Record<string, Set<string>> = {
-      'Proteins': new Set(),
-      'Grains & Carbs': new Set(),
-      'Produce': new Set(),
-      'Condiments & Seasonings': new Set(),
+    const groupedGroceries: Record<string, Map<string, number>> = {
+      'Proteins': new Map(),
+      'Grains & Carbs': new Map(),
+      'Produce': new Map(),
+      'Condiments & Seasonings': new Map(),
     };
 
-    allGeneratedIngredients.forEach((item) => {
+    Object.entries(ingredientAggregator).forEach(([item, count]) => {
       const category = categorizeIngredient(item);
-      groupedGroceries[category].add(item);
+      groupedGroceries[category].set(item, count);
     });
 
-    const consolidatedGroceries = Object.entries(groupedGroceries).flatMap(([category, items]) =>
-      Array.from(items).map((item) => ({
+    const consolidatedGroceries = Object.entries(groupedGroceries).flatMap(([category, itemsMap]) =>
+      Array.from(itemsMap.entries()).map(([item, count]) => ({
         category,
-        item,
-        amount: `Scaled x${totalPortionWeight.toFixed(1)}`,
+        item: enableBulkPrep ? item : scaleIngredientString(item, count),
       }))
     );
 
