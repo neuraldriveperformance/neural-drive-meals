@@ -311,14 +311,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ swappedMeal });
     }
 
-    // --- FULL PLAN GENERATION HANDLER WITH SELF-PREPARED MACRO BALANCING ---
+    // Check if the overall weekly schedule is completely empty
+    const isScheduleCompletelyEmpty = Object.keys(weeklySchedule).length === 0;
+
+    // --- FULL PLAN GENERATION HANDLER ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
       const daySchedule = weeklySchedule[day] || {};
 
       const generateSlots: string[] = [];
       const selfPreparedSlots: { type: string; mealData: any }[] = [];
 
-      // Categorize slots: robustly check string, object, and alternative key name formats
+      // Categorize slots based on status flags
       Object.entries(daySchedule).forEach(([slotType, slotData]: [string, any]) => {
         if (!slotData) return;
 
@@ -340,17 +343,21 @@ export async function POST(req: Request) {
         }
       });
 
-      // Default fallback if no active slots were passed for this day
-      if (generateSlots.length === 0 && selfPreparedSlots.length === 0) {
+      // Global fallback ONLY if the client sent an entirely empty weekly schedule object
+      if (isScheduleCompletelyEmpty) {
         generateSlots.push('Lunch', 'Dinner');
       }
 
-      // 1. Subtract fixed self-provided macros from total daily targets
+      // If this specific day was intentionally set to OFF everywhere, return empty meals array
+      if (generateSlots.length === 0 && selfPreparedSlots.length === 0) {
+        return { day, meals: [] };
+      }
+
+      // 1. Subtract fixed self-provided macros from daily targets
       let remainingCalories = clientCalories;
       let remainingProtein = clientProtein;
 
       const preparedMealsFormatted = selfPreparedSlots.map(({ type, mealData }) => {
-        // Fallback default: if custom macros aren't provided, estimate based on BASE_SLOT_WEIGHTS
         const fallbackCal = Math.round(clientCalories * (BASE_SLOT_WEIGHTS[type] || 0.25));
         const fallbackProt = Math.round(clientProtein * (BASE_SLOT_WEIGHTS[type] || 0.25));
 
@@ -377,7 +384,7 @@ export async function POST(req: Request) {
       remainingCalories = Math.max(remainingCalories, 0);
       remainingProtein = Math.max(remainingProtein, 0);
 
-      // 2. Proportionately split remaining macros among generated slots
+      // 2. Proportionately split remaining macros among requested generated slots
       const totalGenerateWeight = generateSlots.reduce(
         (sum, slot) => sum + (BASE_SLOT_WEIGHTS[slot] || 0.25),
         0
@@ -422,7 +429,7 @@ export async function POST(req: Request) {
         return createScaledMeal(baseMeal, targetCals, targetProt, type);
       });
 
-      // Combine both types of meals for the full daily array
+      // Combine both types of meals for the daily array
       const allMeals = [...preparedMealsFormatted, ...generatedMeals];
 
       return { day, meals: allMeals };
