@@ -488,14 +488,24 @@ export async function POST(req: Request) {
         const occurrences = mealOccurrences[baseMeal.name] || 1;
         const cardMultiplier = enableBulkPrep ? occurrences * totalPortionWeight : totalPortionWeight;
 
-        // Collect ingredients scaled by BOTH calorie target ratio AND portion multiplier
-        const calorieRatio = targetCals / (baseMeal.calories || 600);
-        baseMeal.ingredients.forEach((ing: string) => {
-          const scaledIng = scaleIngredientString(ing, calorieRatio * totalPortionWeight);
-          ingredientAggregator[scaledIng] = (ingredientAggregator[scaledIng] || 0) + 1;
-        });
+        const scaledMeal = createScaledMeal(baseMeal, targetCals, targetProt, type, cardMultiplier);
 
-        return createScaledMeal(baseMeal, targetCals, targetProt, type, cardMultiplier);
+        if (enableBulkPrep) {
+          // Add the fully bulk-scaled ingredient strings directly to the aggregator once per distinct meal name
+          if (!mealOccurrences[`added_${baseMeal.name}`]) {
+            scaledMeal.ingredients.forEach((ing: string) => {
+              ingredientAggregator[ing] = 1;
+            });
+            mealOccurrences[`added_${baseMeal.name}`] = 1;
+          }
+        } else {
+          // Standard daily prep: track single-portion ingredients and accumulate day counts
+          scaledMeal.ingredients.forEach((ing: string) => {
+            ingredientAggregator[ing] = (ingredientAggregator[ing] || 0) + 1;
+          });
+        }
+
+        return scaledMeal;
       });
 
       const allMeals = [...preparedMealsFormatted, ...generatedMeals];
