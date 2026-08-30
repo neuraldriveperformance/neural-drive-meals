@@ -23,6 +23,38 @@ export async function POST(req: Request) {
 
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
+    // Standard baseline weights for meal slots
+    const BASE_SLOT_WEIGHTS: Record<string, number> = {
+      Breakfast: 0.25,
+      Lunch: 0.35,
+      Dinner: 0.40,
+      Snack: 0.15,
+    };
+
+    // Helper: Calculate normalized targets for active slots so they always sum to 100%
+    const calculateBalancedTargets = (activeSlots: string[]) => {
+      const totalActiveWeight = activeSlots.reduce(
+        (sum, slot) => sum + (BASE_SLOT_WEIGHTS[slot] || 0.25),
+        0
+      );
+
+      const targets: Record<string, { calories: number; protein: number }> = {};
+
+      if (totalActiveWeight === 0) return targets;
+
+      activeSlots.forEach((slot) => {
+        const slotWeight = BASE_SLOT_WEIGHTS[slot] || 0.25;
+        const normalizedRatio = slotWeight / totalActiveWeight;
+
+        targets[slot] = {
+          calories: Math.round(clientCalories * normalizedRatio),
+          protein: Math.round(clientProtein * normalizedRatio),
+        };
+      });
+
+      return targets;
+    };
+
     // 1. COMBINE ALL EXCLUSIONS AND DISLIKES
     const rawExclusions = [
       ...(clientExclusions || []),
@@ -295,31 +327,29 @@ export async function POST(req: Request) {
       const randomIndex = Math.floor(Math.random() * pool.length);
       const swappedMeal = createScaledMeal(
         pool[randomIndex],
-        clientCalories ? clientCalories * 0.5 : 700,
-        clientProtein ? clientProtein * 0.5 : 50,
+        swapTarget.targetCalories || 700,
+        swapTarget.targetProtein || 50,
         swapTarget.type
       );
 
       return NextResponse.json({ swappedMeal });
     }
 
-    // --- FULL PLAN GENERATION HANDLER WITH DYNAMIC MACRO SCALING ---
+    // --- FULL PLAN GENERATION HANDLER WITH WEIGHTED MACRO BALANCING ---
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
       const daySchedule = weeklySchedule[day] || {};
       
-      // Get all active slots that are scheduled to generate
-      const activeSlots = Object.entries(daySchedule).filter(
-        ([_, slotData]: [string, any]) => slotData.status === 'generate'
-      );
+      // Get all active slot names scheduled to generate
+      const activeSlots = Object.entries(daySchedule)
+        .filter(([_, slotData]: [string, any]) => slotData.status === 'generate')
+        .map(([type]) => type);
 
-      const activeCount = activeSlots.length;
-      
-      // Calculate target calories & protein per active meal slot
-      const perMealCalories = activeCount > 0 && clientCalories ? clientCalories / activeCount : 600;
-      const perMealProtein = activeCount > 0 && clientProtein ? clientProtein / activeCount : 40;
+      // Get proportional targets (Lunch gets ~46.7%, Dinner ~53.3% if only L+D are active)
+      const slotTargets = calculateBalancedTargets(activeSlots);
 
-      const meals = activeSlots.map(([type, _]) => {
+      const meals = activeSlots.map((type) => {
         let baseMeal;
+        const target = slotTargets[type] || { calories: 600, protein: 40 };
 
         if (type === 'Lunch') {
           const index = enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
@@ -349,7 +379,7 @@ export async function POST(req: Request) {
           };
         }
 
-        return createScaledMeal(baseMeal, perMealCalories, perMealProtein, type);
+        return createScaledMeal(baseMeal, target.calories, target.protein, type);
       });
 
       return { day, meals };
