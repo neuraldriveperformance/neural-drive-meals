@@ -318,51 +318,56 @@ export async function POST(req: Request) {
       const generateSlots: string[] = [];
       const selfPreparedSlots: { type: string; mealData: any }[] = [];
 
-      // Categorize slots by generate vs self-prepared
+      // Categorize slots: robustly check string, object, and alternative key name formats
       Object.entries(daySchedule).forEach(([slotType, slotData]: [string, any]) => {
         if (!slotData) return;
 
-        const isGenerate =
-          (typeof slotData === 'string' && slotData === 'generate') ||
-          (typeof slotData === 'object' && slotData?.status === 'generate');
+        const statusLower = (
+          typeof slotData === 'string' ? slotData : slotData?.status || ''
+        ).toLowerCase();
 
-        const isSelfPrepared =
-          typeof slotData === 'object' && slotData?.status === 'self-prepared';
+        const isGenerate = statusLower === 'generate';
+        const isSelfProvided =
+          statusLower.includes('self') || statusLower.includes('custom');
 
         if (isGenerate) {
           generateSlots.push(slotType);
-        } else if (isSelfPrepared) {
+        } else if (isSelfProvided) {
           selfPreparedSlots.push({
             type: slotType,
-            mealData: slotData.meal || slotData,
+            mealData: typeof slotData === 'object' ? slotData.meal || slotData : {},
           });
         }
       });
 
-      // Default fallback if no slots were passed for this day
+      // Default fallback if no active slots were passed for this day
       if (generateSlots.length === 0 && selfPreparedSlots.length === 0) {
         generateSlots.push('Lunch', 'Dinner');
       }
 
-      // 1. Subtract fixed self-prepared macros from total daily targets
+      // 1. Subtract fixed self-provided macros from total daily targets
       let remainingCalories = clientCalories;
       let remainingProtein = clientProtein;
 
       const preparedMealsFormatted = selfPreparedSlots.map(({ type, mealData }) => {
-        const cal = Number(mealData.calories || mealData.cals || 0);
-        const prot = Number(mealData.protein || 0);
+        // Fallback default: if custom macros aren't provided, estimate based on BASE_SLOT_WEIGHTS
+        const fallbackCal = Math.round(clientCalories * (BASE_SLOT_WEIGHTS[type] || 0.25));
+        const fallbackProt = Math.round(clientProtein * (BASE_SLOT_WEIGHTS[type] || 0.25));
+
+        const cal = Number(mealData.calories || mealData.cals) || fallbackCal;
+        const prot = Number(mealData.protein) || fallbackProt;
 
         remainingCalories -= cal;
         remainingProtein -= prot;
 
         return {
           type,
-          name: mealData.name || mealData.title || `Self-Prepared ${type}`,
+          name: mealData.name || mealData.title || `Self-Provided ${type}`,
           calories: cal,
           protein: prot,
           carbs: Number(mealData.carbs || 0),
           fat: Number(mealData.fat || 0),
-          ingredients: mealData.ingredients || ['User-defined self-prepared meal'],
+          ingredients: mealData.ingredients || ['Self-provided meal'],
           instructions: mealData.instructions || ['Prepared independently.'],
           isSelfPrepared: true,
         };
@@ -447,8 +452,9 @@ export async function POST(req: Request) {
     };
 
     return NextResponse.json(mockData);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error generating plan:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
