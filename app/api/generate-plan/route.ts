@@ -79,10 +79,13 @@ export async function POST(req: Request) {
     ) => {
       const cals = targetCals || baseMeal.calories;
       const prot = targetProt || baseMeal.protein;
-      const ratio = cals / (baseMeal.calories || 600);
+      
+      // Calculate ratio to scale ingredient quantities to match actual target calories
+      const calorieRatio = cals / (baseMeal.calories || 600);
+      const combinedMultiplier = calorieRatio * portionMultiplier;
 
       const scaledIngredients = baseMeal.ingredients.map((ing: string) =>
-        scaleIngredientString(ing, portionMultiplier)
+        scaleIngredientString(ing, combinedMultiplier)
       );
 
       return {
@@ -90,8 +93,8 @@ export async function POST(req: Request) {
         type,
         calories: Math.round(cals),
         protein: Math.round(prot),
-        carbs: Math.round((baseMeal.carbs || 0) * ratio),
-        fat: Math.round((baseMeal.fat || 0) * ratio),
+        carbs: Math.round((baseMeal.carbs || 0) * calorieRatio),
+        fat: Math.round((baseMeal.fat || 0) * calorieRatio),
         ingredients: scaledIngredients,
         rawIngredients: baseMeal.ingredients,
       };
@@ -485,10 +488,10 @@ export async function POST(req: Request) {
         const occurrences = mealOccurrences[baseMeal.name] || 1;
         const cardMultiplier = enableBulkPrep ? occurrences * totalPortionWeight : totalPortionWeight;
 
-        // Collect ingredient totals for grocery sum
+        // Collect ingredients scaled by BOTH calorie target ratio AND portion multiplier
+        const calorieRatio = targetCals / (baseMeal.calories || 600);
         baseMeal.ingredients.forEach((ing: string) => {
-          const scaleAmount = totalPortionWeight;
-          const scaledIng = scaleIngredientString(ing, scaleAmount);
+          const scaledIng = scaleIngredientString(ing, calorieRatio * totalPortionWeight);
           ingredientAggregator[scaledIng] = (ingredientAggregator[scaledIng] || 0) + 1;
         });
 
