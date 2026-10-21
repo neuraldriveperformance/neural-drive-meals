@@ -807,7 +807,7 @@ export default function Home() {
             </div>
 
             <MealPlanCalendar
-              weeklyCalendar={weeklyCalendar}
+              weeklyCalendar={weeklyCalendar as any}
               onSelectMeal={() => {}}
               onSwapMeal={handleSwapMeal}
             />
