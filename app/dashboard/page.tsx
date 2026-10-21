@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
+import ProfileModal from '@/components/ProfileModal';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'plans' | 'recipes'>('plans');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
 
   useEffect(() => {
     async function fetchSavedPlans() {
@@ -84,12 +86,20 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <Link
-            href="/"
-            className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
-          >
-            + Create New Plan
-          </Link>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setIsProfileOpen(true)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2"
+            >
+              <span>⚙️</span> Profile Settings
+            </button>
+            <Link
+              href="/"
+              className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+            >
+              + Create New Plan
+            </Link>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -179,6 +189,12 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Household & Nutrition Profile Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
     </div>
   );
 }
