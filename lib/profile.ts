@@ -8,9 +8,11 @@ export interface UserProfile {
   fats_grams: number;
   dietary_preferences: string[];
   household_info: {
-    household_size: number;
-    dependents: Array<{
-      age_group: string; // e.g., 'child', 'teen'
+    household_size?: number;
+    teens?: number;
+    children?: number;
+    dependents?: Array<{
+      age_group: string;
       allergies_restrictions: string[];
     }>;
   };
@@ -32,7 +34,6 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     .single();
 
   if (error && error.code === 'PGRST116') {
-    // If no profile exists yet, create one
     const { data: newProfile } = await supabase
       .from('profiles')
       .insert([{ id: user.id }])
