@@ -1,10 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createBrowserClient } from '@supabase/ssr';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'plans' | 'recipes'>('plans');
+  const [savedPlans, setSavedPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    async function fetchSavedPlans() {
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+
+        const { data, error } = await supabase
+          .from('saved_plans')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          setSavedPlans(data);
+        }
+      } catch (err) {
+        console.error('Error fetching plans:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchSavedPlans();
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -32,8 +61,6 @@ export default function DashboardPage() {
 
         <button
           onClick={async () => {
-            // Sign out via client SDK
-            const { createBrowserClient } = await import('@supabase/ssr');
             const supabase = createBrowserClient(
               process.env.NEXT_PUBLIC_SUPABASE_URL!,
               process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -91,17 +118,53 @@ export default function DashboardPage() {
 
         {/* Content Area */}
         {activeTab === 'plans' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
-              <p className="text-slate-400 text-sm">No saved meal plans yet.</p>
-              <Link
-                href="/"
-                className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
-              >
-                Generate a plan to save it here →
-              </Link>
+          loading ? (
+            <div className="p-8 text-center text-slate-400 text-sm">
+              Loading your saved library...
             </div>
-          </div>
+          ) : savedPlans.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {savedPlans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="font-semibold text-lg text-slate-100">
+                        {plan.title || plan.plan_name || 'Weekly Meal Plan'}
+                      </h2>
+                      <span className="text-xs text-slate-500">
+                        {new Date(plan.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-slate-400 text-xs mb-4">
+                      {plan.plan_data?.length || 7}-Day Custom Performance Protocol
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/"
+                    className="mt-2 text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center gap-1"
+                  >
+                    View Plan Details →
+                  </Link>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 col-span-full">
+                <p className="text-slate-400 text-sm">No saved meal plans yet.</p>
+                <Link
+                  href="/"
+                  className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
+                >
+                  Generate a plan to save it here →
+                </Link>
+              </div>
+            </div>
+          )
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 col-span-full">
