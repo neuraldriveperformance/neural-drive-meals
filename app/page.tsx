@@ -61,7 +61,6 @@ export default function Home() {
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
   const [groceries, setGroceries] = useState<GroceryCategory[]>([]);
   const [estimatedCost, setEstimatedCost] = useState('');
-  const [selectedMeal, setSelectedMeal] = useState<any | null>(null);
 
   // 4. Schedule Matrix State
   const [schedule, setSchedule] = useState<WeeklySchedule>({
@@ -809,7 +808,7 @@ export default function Home() {
 
             <MealPlanCalendar
               weeklyCalendar={weeklyCalendar}
-              onSelectMeal={(meal) => setSelectedMeal(meal)}
+              onSelectMeal={() => {}}
               onSwapMeal={handleSwapMeal}
             />
 
