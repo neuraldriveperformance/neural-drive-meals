@@ -542,3 +542,281 @@ export default function Home() {
                           className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
                         >
                           -
+                        </button>
+                        <span className="text-xs font-extrabold text-[#00F2FE]">{household.children}</span>
+                        <button
+                          type="button"
+                          onClick={() => setHousehold({ ...household, children: household.children + 1 })}
+                          className="w-5 h-5 bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold rounded flex items-center justify-center transition"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Multiplier Readout */}
+                  <div className="bg-[#0F1724]/80 border border-[#00F2FE]/30 p-2.5 rounded-lg text-center">
+                    <span className="text-xs text-gray-300">
+                      Shared Meal Multiplier: <strong className="text-[#00F2FE] text-sm">{totalPortionWeight}x Adult Portions</strong>
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                      Family Preferences & Dislikes
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. Spicy, Mushrooms"
+                        value={dislikeInput}
+                        onChange={(e) => setDislikeInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addFamilyDislike()}
+                        className="flex-1 bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
+                      />
+                      <button
+                        type="button"
+                        onClick={addFamilyDislike}
+                        className="bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {household.familyDislikes.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {household.familyDislikes.map((item) => (
+                          <span key={item} className="bg-[#0F1724] border border-amber-500/40 text-amber-300 text-[11px] px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                            {item}
+                            <button type="button" onClick={() => removeFamilyDislike(item)} className="hover:text-red-400 font-bold">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* VARIETY & BATCH PREP CONTROLS */}
+          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
+            <div className="border-b border-[#1E2D4A] pb-3">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
+                3. Recipe Variety & Batch Cooking Strategy
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <label className="font-bold text-gray-300 uppercase text-[10px]">
+                    Meal Variety Level ({variety}/5)
+                  </label>
+                  <span className="text-[#00F2FE] font-bold text-[11px]">
+                    {variety === 1
+                      ? '1 - High Repeat (Fast Prep)'
+                      : variety === 2
+                      ? '2 - Moderate Repeats'
+                      : variety === 3
+                      ? '3 - Balanced Rotation'
+                      : variety === 4
+                      ? '4 - High Variety'
+                      : '5 - Maximum Variety (Unique Daily)'}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="5"
+                  value={variety}
+                  onChange={(e) => setVariety(Number(e.target.value))}
+                  className="w-full accent-[#00F2FE] bg-[#0F1724] rounded-lg h-2 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center justify-between bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl">
+                <div>
+                  <div className="text-xs font-bold text-white">Enable Batch Cooking Strategy</div>
+                  <div className="text-[10px] text-gray-400">Reuses cooked proteins/grains across consecutive lunches/dinners</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkPrep(!bulkPrep)}
+                  className={`px-4 py-1.5 rounded-lg font-black text-xs transition ${
+                    bulkPrep ? 'bg-[#00F2FE] text-black' : 'bg-[#1E2D4A] text-gray-400'
+                  }`}
+                >
+                  {bulkPrep ? 'ENABLED' : 'DISABLED'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* SCHEDULE MATRIX */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase">
+                  Weekly Schedule Matrix & Shared Toggles
+                </label>
+                <p className="text-[10px] text-gray-500">Click slot to cycle. Click badge to toggle 👤 Solo vs 👨‍👩‍👧 Shared.</p>
+              </div>
+              <div className="flex gap-3 text-[10px] font-semibold">
+                <span className="text-[#00F2FE]">● Generate</span>
+                <span className="text-amber-400">● Self-Provided</span>
+                <span className="text-gray-500">○ Off</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+              {daysOfWeek.map((day) => (
+                <div key={day} className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-3 space-y-2 flex flex-col">
+                  <div className="text-center font-extrabold text-xs text-[#00F2FE] border-b border-[#1E2D4A] pb-1.5">
+                    {day}
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    {mealTypes.map((type) => {
+                      const slotData = schedule[day]?.[type] || { status: 'off', shared: false };
+                      return (
+                        <div
+                          key={type}
+                          onClick={() => cycleMealSlot(day, type)}
+                          className={`w-full text-left text-[11px] p-2 rounded font-bold transition flex flex-col gap-1 cursor-pointer select-none ${
+                            slotData.status === 'generate'
+                              ? 'bg-[#00F2FE]/15 border border-[#00F2FE]/50 text-white'
+                              : slotData.status === 'self'
+                              ? 'bg-amber-500/15 border border-amber-500/50 text-amber-200'
+                              : 'bg-[#0F1724] text-gray-500 border border-[#1E2D4A] hover:text-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>{type}</span>
+                            <span className="text-[9px] px-1 rounded bg-[#0F1724]">
+                              {slotData.status.toUpperCase()}
+                            </span>
+                          </div>
+
+                          {slotData.status === 'generate' && (
+                            <button
+                              type="button"
+                              onClick={(e) => toggleMealShared(day, type, e)}
+                              className={`text-[9px] py-0.5 px-1.5 rounded flex items-center justify-between transition ${
+                                slotData.shared
+                                  ? 'bg-[#00F2FE] text-black font-extrabold'
+                                  : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
+                              }`}
+                            >
+                              <span>{slotData.shared ? '👨‍👩‍👧 Shared' : '👤 Solo'}</span>
+                              <span>{slotData.shared ? `${totalPortionWeight}x` : '1.0x'}</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* PREFERENCES & SUBMISSION */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-[#1E2D4A]">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Household Budget Tier</label>
+              <select
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
+              >
+                <option value="budget">Budget-Conscious</option>
+                <option value="moderate">Moderate / Balanced</option>
+                <option value="premium">Premium / Organic Focus</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Max Prep Time</label>
+              <select
+                value={maxPrepTime}
+                onChange={(e) => setMaxPrepTime(e.target.value)}
+                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
+              >
+                <option value="no-limit">No Limit (Standard)</option>
+                <option value="15-mins">Under 15 Minutes</option>
+                <option value="30-mins">Under 30 Minutes</option>
+                <option value="45-mins">Under 45 Minutes</option>
+              </select>
+            </div>
+          </div>
+
+          {/* LEGAL DISCLAIMER & GENERATE ACTION */}
+          <div className="border-t border-[#1E2D4A] pt-6 space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={disclaimerAgreed}
+                onChange={(e) => setDisclaimerAgreed(e.target.checked)}
+                className="mt-0.5 accent-[#00F2FE] rounded cursor-pointer"
+              />
+              <span className="text-[11px] text-gray-400 leading-relaxed">
+                I understand that NDP protocol recommendations are for informational performance purposes and do not replace professional medical guidance.
+              </span>
+            </label>
+
+            <button
+              type="button"
+              onClick={handleGeneratePlan}
+              disabled={loading}
+              className="w-full bg-[#00F2FE] hover:bg-[#00D8E6] text-black font-black text-sm uppercase tracking-wider py-4 rounded-xl transition shadow-lg shadow-[#00F2FE]/10 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? (
+                <span>Generating Precision Meal Plan...</span>
+              ) : (
+                <span>⚡ GENERATE MEAL PLAN PROTOCOL</span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* RESULTS SECTION WITH SAVE BANNER & CALENDAR */}
+        {weeklyCalendar && (
+          <div id="results-section" className="space-y-6 pt-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#162032] border border-[#00F2FE]/40 rounded-2xl p-6 shadow-xl">
+              <div>
+                <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wide">
+                  Generated Meal Plan & Grocery Breakdown
+                </h2>
+                <p className="text-xs text-gray-300 mt-1">
+                  Estimated Grocery Spend: <span className="text-[#00F2FE] font-bold">{estimatedCost || '$120 – $220 USD'}</span>
+                </p>
+              </div>
+
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleSavePlanToSupabase}
+                  disabled={savingPlan}
+                  className="bg-[#00F2FE] hover:bg-[#00D8E6] text-black font-extrabold text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  {savingPlan ? 'Saving Plan...' : '💾 Save Plan to Dashboard'}
+                </button>
+                {savePlanMessage && (
+                  <span className="text-xs text-[#00F2FE] font-bold mt-1">{savePlanMessage}</span>
+                )}
+              </div>
+            </div>
+
+            <MealPlanCalendar
+              weeklyCalendar={weeklyCalendar}
+              onSelectMeal={(meal) => setSelectedMeal(meal)}
+              onSwapMeal={handleSwapMeal}
+            />
+
+            {groceries.length > 0 && <GroceryList categories={groceries} />}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
