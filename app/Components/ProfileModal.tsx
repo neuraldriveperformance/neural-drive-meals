@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getUserProfile, updateUserProfile, UserProfile } from '@/lib/profile';
+import { getUserProfile, updateUserProfile } from '@/lib/profile';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -15,8 +15,6 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
   const [dailyCalories, setDailyCalories] = useState(2000);
   const [proteinGrams, setProteinGrams] = useState(150);
-  const [carbsGrams, setCarbsGrams] = useState(200);
-  const [fatsGrams, setFatsGrams] = useState(65);
   
   const [householdSize, setHouseholdSize] = useState(1);
   const [teensCount, setTeensCount] = useState(0);
@@ -32,8 +30,6 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
       if (profile) {
         setDailyCalories(profile.daily_calories || 2000);
         setProteinGrams(profile.protein_grams || 150);
-        setCarbsGrams(profile.carbs_grams || 200);
-        setFatsGrams(profile.fats_grams || 65);
         setDietaryPreferences((profile.dietary_preferences || []).join(', '));
 
         const info = profile.household_info || {};
@@ -59,8 +55,6 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     const success = await updateUserProfile({
       daily_calories: Number(dailyCalories),
       protein_grams: Number(proteinGrams),
-      carbs_grams: Number(carbsGrams),
-      fats_grams: Number(fatsGrams),
       dietary_preferences: prefsArray,
       household_info: {
         household_size: Number(householdSize),
@@ -130,28 +124,6 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Carbs (g)
-                  </label>
-                  <input
-                    type="number"
-                    value={carbsGrams}
-                    onChange={(e) => setCarbsGrams(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Fats (g)
-                  </label>
-                  <input
-                    type="number"
-                    value={fatsGrams}
-                    onChange={(e) => setFatsGrams(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
               </div>
             </div>
 
@@ -203,11 +175,11 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             {/* Dietary Restrictions */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">
-                Dietary Preferences / Exclusions (comma-separated)
+                Dietary Exclusions
               </label>
               <input
                 type="text"
-                placeholder="e.g. Gluten-Free, Dairy-Free, No Peanuts"
+                placeholder="e.g. Gluten-Free, Dairy-Free, Peanuts"
                 value={dietaryPreferences}
                 onChange={(e) => setDietaryPreferences(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
