@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
-import ProfileModal from '@/components/ProfileModal';
+import ProfileModal from '../Components/ProfileModal';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'plans' | 'recipes'>('plans');
