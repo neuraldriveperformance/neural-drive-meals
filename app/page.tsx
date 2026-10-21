@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryList, { GroceryCategory } from './Components/GroceryList';
+import { createClient } from '@/lib/supabaseClient';
 
 const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
@@ -51,6 +53,10 @@ export default function Home() {
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Supabase Saving States
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [savePlanMessage, setSavePlanMessage] = useState<string | null>(null);
+
   const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
   const [groceries, setGroceries] = useState<GroceryCategory[]>([]);
@@ -67,6 +73,8 @@ export default function Home() {
     SAT: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'off', shared: false }, Dinner: { status: 'off', shared: false }, Snacks: { status: 'off', shared: false } },
     SUN: { Breakfast: { status: 'off', shared: false }, Lunch: { status: 'off', shared: false }, Dinner: { status: 'off', shared: false }, Snacks: { status: 'off', shared: false } },
   });
+
+  const supabase = createClient();
 
   // Calculate Portion Weight based on Adult (1.0x), Teen (0.8x), and Child (0.5x) Coefficients
   const totalPortionWeight = Number(
@@ -127,6 +135,51 @@ export default function Home() {
         [day]: { ...(prev[day] || {}), [slot]: { ...current, shared: !current.shared } },
       };
     });
+  };
+
+  const handleSavePlanToSupabase = async () => {
+    if (!weeklyCalendar) return;
+
+    setSavingPlan(true);
+    setSavePlanMessage(null);
+
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (!user || authError) {
+        setSavePlanMessage('Please log in to save meal plans.');
+        setSavingPlan(false);
+        return;
+      }
+
+      const planTitle = clientName 
+        ? `${clientName}'s Weekly Performance Plan` 
+        : 'Weekly Performance Meal Plan';
+
+      const { error } = await supabase.from('saved_plans').insert({
+        user_id: user.id,
+        title: planTitle,
+        plan_data: {
+          calendar: weeklyCalendar,
+          groceries,
+          estimatedCost,
+          household,
+          portionWeight: totalPortionWeight,
+        },
+        created_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.error('Supabase Save Error:', error);
+        setSavePlanMessage('Failed to save meal plan.');
+      } else {
+        setSavePlanMessage('Successfully saved to your Library!');
+      }
+    } catch (err: any) {
+      setSavePlanMessage(`Error: ${err.message}`);
+    } finally {
+      setSavingPlan(false);
+    }
   };
 
   const handleGeneratePlan = async () => {
@@ -202,12 +255,10 @@ export default function Home() {
 
   const handleSwapMeal = async (dayToSwap: string, mealTypeToSwap: string) => {
     try {
-      // 1. Find target meal name
       const targetDayPlan = weeklyCalendar?.find((d: any) => d.day === dayToSwap);
       const targetMeal = targetDayPlan?.meals?.find((m: any) => m.type === mealTypeToSwap);
       const oldMealName = targetMeal?.name;
 
-      // 2. Collect ALL currently assigned meals on calendar matrix
       const currentCalendarMeals: string[] = [];
       weeklyCalendar?.forEach((dayObj: any) => {
         dayObj.meals?.forEach((m: any) => {
@@ -215,10 +266,8 @@ export default function Home() {
         });
       });
 
-      // Avoid recipes in local storage history and on current active calendar
       const combinedExclusions = Array.from(new Set([...recipeHistory, ...currentCalendarMeals]));
 
-      // 3. Request single replacement recipe
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -247,7 +296,6 @@ export default function Home() {
       if (data.swappedMeal && weeklyCalendar) {
         const replacementMeal = data.swappedMeal;
 
-        // 4. Matrix Swap: Replace ALL instances matching target recipe name across all days
         const updatedCalendar = weeklyCalendar.map((dayObj: any) => {
           const updatedMeals = dayObj.meals.map((meal: any) => {
             const matchesOldMeal = oldMealName && meal.name === oldMealName;
@@ -267,7 +315,6 @@ export default function Home() {
 
         setWeeklyCalendar([...updatedCalendar]);
 
-        // 5. Update history
         if (replacementMeal.name) {
           const updatedHistory = Array.from(
             new Set([...recipeHistory, replacementMeal.name])
@@ -284,6 +331,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* HEADER NAVIGATION */}
         <header className="border-b border-[#1E2D4A] pb-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="relative w-12 h-12 md:w-16 md:h-16 flex-shrink-0">
@@ -298,6 +346,21 @@ export default function Home() {
               </p>
             </div>
           </div>
+
+          <nav className="flex items-center space-x-4">
+            <Link 
+              href="/" 
+              className="text-[#00F2FE] font-bold text-xs md:text-sm border-b-2 border-[#00F2FE] pb-1"
+            >
+              Generator
+            </Link>
+            <Link 
+              href="/dashboard" 
+              className="text-gray-400 hover:text-white transition text-xs md:text-sm font-medium"
+            >
+              Dashboard
+            </Link>
+          </nav>
         </header>
 
         {/* CONFIGURATION PANEL */}
@@ -679,7 +742,7 @@ export default function Home() {
                 onChange={(e) => setMaxPrepTime(e.target.value)}
                 className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
               >
-                <option value="no-limit">No Preference / Any Time</option>
+                <option value="no-limit">No Limit (Standard)</option>
                 <option value="15-mins">Under 15 Minutes</option>
                 <option value="30-mins">Under 30 Minutes</option>
                 <option value="45-mins">Under 45 Minutes</option>
@@ -687,45 +750,70 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="space-y-4 pt-4 border-t border-[#1E2D4A]">
-            <div className="flex items-center gap-3">
+          {/* LEGAL DISCLAIMER & GENERATE ACTION */}
+          <div className="border-t border-[#1E2D4A] pt-6 space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                id="disclaimer"
                 checked={disclaimerAgreed}
                 onChange={(e) => setDisclaimerAgreed(e.target.checked)}
-                className="w-4 h-4 accent-[#00F2FE] bg-[#162032] border-[#1E2D4A] rounded cursor-pointer"
+                className="mt-0.5 accent-[#00F2FE] rounded cursor-pointer"
               />
-              <label htmlFor="disclaimer" className="text-xs text-gray-300 cursor-pointer">
-                I understand that NDP protocol recommendations are for informational performance purposes and do not replace professional medical guidance.
-              </label>
-            </div>
+              <span className="text-[11px] text-gray-400 leading-relaxed">
+                I understand that meal plans generated by Neural Drive Performance are for informational and performance-tracking purposes. Always consult a licensed dietitian or physician for clinical medical advice.
+              </span>
+            </label>
 
             <button
               type="button"
               onClick={handleGeneratePlan}
               disabled={loading}
-              className={`w-full py-4 rounded-xl font-black uppercase text-sm tracking-widest transition flex items-center justify-center gap-2 ${
-                loading
-                  ? 'bg-[#1E2D4A] text-gray-500 cursor-not-allowed'
-                  : 'bg-[#00F2FE] hover:bg-[#00c8d4] text-black shadow-lg shadow-[#00F2FE]/20'
-              }`}
+              className="w-full bg-[#00F2FE] hover:bg-[#00D8E6] text-black font-black text-sm uppercase tracking-wider py-4 rounded-xl transition shadow-lg shadow-[#00F2FE]/10 flex items-center justify-center gap-2"
             >
-              {loading ? 'GENERATE PROTOCOL MATRIX...' : '⚡ GENERATE MEAL PLAN PROTOCOL'}
+              {loading ? (
+                <span>Generating Precision Meal Plan...</span>
+              ) : (
+                <span>⚡ Generate Performance Meal Plan</span>
+              )}
             </button>
           </div>
         </div>
 
-        {/* RESULTS MATRIX SECTION */}
+        {/* RESULTS SECTION */}
         {weeklyCalendar && (
           <div id="results-section" className="space-y-8 pt-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6">
+              <div>
+                <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wide">
+                  Generated Meal Plan & Grocery Breakdown
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  Estimated Grocery Spend: <span className="text-white font-bold">{estimatedCost}</span>
+                </p>
+              </div>
+
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleSavePlanToSupabase}
+                  disabled={savingPlan}
+                  className="bg-[#1E2D4A] hover:bg-[#00F2FE] hover:text-black text-white font-bold text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl transition flex items-center gap-2 border border-[#00F2FE]/30"
+                >
+                  {savingPlan ? 'Saving Plan...' : '💾 Save Plan to Dashboard'}
+                </button>
+                {savePlanMessage && (
+                  <span className="text-xs text-[#00F2FE] font-medium">{savePlanMessage}</span>
+                )}
+              </div>
+            </div>
+
             <MealPlanCalendar
-              calendarDays={weeklyCalendar}
-              onSwapMeal={handleSwapMeal}
+              weeklyCalendar={weeklyCalendar}
               onSelectMeal={(meal) => setSelectedMeal(meal)}
+              onSwapMeal={handleSwapMeal}
             />
 
-            <GroceryList categories={groceries} estimatedCost={estimatedCost} />
+            {groceries.length > 0 && <GroceryList categories={groceries} />}
           </div>
         )}
       </div>
