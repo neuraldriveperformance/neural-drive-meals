@@ -812,7 +812,7 @@ export default function Home() {
               </p>
             )}
 
-            <MealPlanCalendar weeklyCalendar={weeklyCalendar} onSwapMeal={handleSwapMeal} />
+            <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
             <GroceryList categories={groceries} />
           </div>
         )}
