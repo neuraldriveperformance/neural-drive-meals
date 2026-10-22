@@ -5,6 +5,7 @@ import Link from 'next/link';
 import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryList, { GroceryCategory } from './Components/GroceryList';
 import { createClient } from '@/lib/supabaseClient';
+import { getUserProfile } from '@/lib/profile';
 
 const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
@@ -87,6 +88,40 @@ export default function Home() {
     } catch (e) {
       console.warn('Unable to load recipe history from localStorage:', e);
     }
+  }, []);
+
+  // Auto-prefill form inputs from Supabase Profile Settings
+  useEffect(() => {
+    async function loadProfileDefaults() {
+      try {
+        const profile = await getUserProfile();
+        if (!profile) return;
+
+        if (profile.daily_calories) {
+          setClientCalories(profile.daily_calories);
+        }
+        if (profile.protein_grams) {
+          setClientProtein(profile.protein_grams);
+        }
+        if (profile.dietary_preferences && profile.dietary_preferences.length > 0) {
+          setClientExclusions(profile.dietary_preferences);
+        }
+
+        if (profile.household_info) {
+          const info = profile.household_info;
+          setHousehold((prev) => ({
+            ...prev,
+            adults: info.household_size ?? prev.adults,
+            teens: info.teens ?? prev.teens,
+            children: info.children ?? prev.children,
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load user profile defaults:', err);
+      }
+    }
+
+    loadProfileDefaults();
   }, []);
 
   const addClientExclusion = () => {
@@ -707,7 +742,6 @@ export default function Home() {
                               }`}
                             >
                               <span>{slotData.shared ? '👨‍👩‍👧 Shared' : '👤 Solo'}</span>
-                              <span>{slotData.shared ? `${totalPortionWeight}x` : '1.0x'}</span>
                             </button>
                           )}
                         </div>
@@ -719,100 +753,67 @@ export default function Home() {
             </div>
           </div>
 
-          {/* PREFERENCES & SUBMISSION */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-[#1E2D4A]">
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Household Budget Tier</label>
-              <select
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
-              >
-                <option value="budget">Budget-Conscious</option>
-                <option value="moderate">Moderate / Balanced</option>
-                <option value="premium">Premium / Organic Focus</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-gray-400 uppercase mb-2">Max Prep Time</label>
-              <select
-                value={maxPrepTime}
-                onChange={(e) => setMaxPrepTime(e.target.value)}
-                className="w-full bg-[#162032] border border-[#1E2D4A] rounded-lg px-4 py-2 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
-              >
-                <option value="no-limit">No Limit (Standard)</option>
-                <option value="15-mins">Under 15 Minutes</option>
-                <option value="30-mins">Under 30 Minutes</option>
-                <option value="45-mins">Under 45 Minutes</option>
-              </select>
-            </div>
-          </div>
-
-          {/* LEGAL DISCLAIMER & GENERATE ACTION */}
-          <div className="border-t border-[#1E2D4A] pt-6 space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer">
+          {/* GENERATE ACTION AREA */}
+          <div className="pt-4 border-t border-[#1E2D4A] space-y-4">
+            <div className="flex items-center gap-3">
               <input
                 type="checkbox"
+                id="disclaimer"
                 checked={disclaimerAgreed}
                 onChange={(e) => setDisclaimerAgreed(e.target.checked)}
-                className="mt-0.5 accent-[#00F2FE] rounded cursor-pointer"
+                className="w-4 h-4 accent-[#00F2FE] rounded cursor-pointer"
               />
-              <span className="text-[11px] text-gray-400 leading-relaxed">
-                I understand that NDP protocol recommendations are for informational performance purposes and do not replace professional medical guidance.
-              </span>
-            </label>
+              <label htmlFor="disclaimer" className="text-xs text-gray-400 cursor-pointer">
+                I understand these meal plans are generated algorithmically for performance guidelines and do not replace personalized medical advice.
+              </label>
+            </div>
 
             <button
               type="button"
               onClick={handleGeneratePlan}
-              disabled={loading}
-              className="w-full bg-[#00F2FE] hover:bg-[#00D8E6] text-black font-black text-sm uppercase tracking-wider py-4 rounded-xl transition shadow-lg shadow-[#00F2FE]/10 flex items-center justify-center gap-2 cursor-pointer"
+              disabled={loading || !disclaimerAgreed}
+              className="w-full py-3.5 bg-[#00F2FE] hover:bg-[#00d8e4] disabled:opacity-50 text-black font-black text-sm uppercase tracking-wider rounded-xl transition shadow-lg shadow-[#00F2FE]/20"
             >
-              {loading ? (
-                <span>Generating Precision Meal Plan...</span>
-              ) : (
-                <span>⚡ GENERATE MEAL PLAN PROTOCOL</span>
-              )}
+              {loading ? 'Building Precision Plan...' : 'Generate Performance Meal Plan'}
             </button>
           </div>
         </div>
 
-        {/* RESULTS SECTION WITH SAVE BANNER & CALENDAR */}
+        {/* RESULTS SECTION */}
         {weeklyCalendar && (
-          <div id="results-section" className="space-y-6 pt-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#162032] border border-[#00F2FE]/40 rounded-2xl p-6 shadow-xl">
+          <div id="results-section" className="space-y-8 pt-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6">
               <div>
-                <h2 className="text-xl font-black text-[#00F2FE] uppercase tracking-wide">
-                  Generated Meal Plan & Grocery Breakdown
-                </h2>
-                <p className="text-xs text-gray-300 mt-1">
-                  Estimated Grocery Spend: <span className="text-[#00F2FE] font-bold">{estimatedCost || '$120 – $220 USD'}</span>
+                <h2 className="text-xl font-black text-white">Your Weekly Plan is Ready</h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  Estimated Weekly Grocery Budget: <span className="text-[#00F2FE] font-bold">{estimatedCost}</span>
                 </p>
               </div>
 
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={handleSavePlanToSupabase}
                   disabled={savingPlan}
-                  className="bg-[#00F2FE] hover:bg-[#00D8E6] text-black font-extrabold text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-2.5 bg-[#162032] hover:bg-[#1E2D4A] border border-[#00F2FE]/50 text-[#00F2FE] font-bold text-xs rounded-xl transition flex-1 sm:flex-none"
                 >
-                  {savingPlan ? 'Saving Plan...' : '💾 Save Plan to Dashboard'}
+                  {savingPlan ? 'Saving...' : '💾 Save to Library'}
                 </button>
-                {savePlanMessage && (
-                  <span className="text-xs text-[#00F2FE] font-bold mt-1">{savePlanMessage}</span>
-                )}
               </div>
             </div>
 
-          <MealPlanCalendar
-              calendarDays={weeklyCalendar as any}
-              onSelectMeal={() => {}}
-              onSwapMeal={handleSwapMeal}
-            />
+            {savePlanMessage && (
+              <p
+                className={`text-xs px-2 ${
+                  savePlanMessage.includes('Successfully') ? 'text-[#00F2FE]' : 'text-rose-400'
+                }`}
+              >
+                {savePlanMessage}
+              </p>
+            )}
 
-            {groceries.length > 0 && <GroceryList categories={groceries} />}
+            <MealPlanCalendar weeklyCalendar={weeklyCalendar} onSwapMeal={handleSwapMeal} />
+            <GroceryList categories={groceries} />
           </div>
         )}
       </div>
