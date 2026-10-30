@@ -11,7 +11,10 @@ export interface Meal {
   carbs: number;
   fat: number;
   prepTime?: string;
-  ingredients: string[];
+  cookTime?: string;
+  isBatchCooked?: boolean;
+  batchYield?: string;
+  ingredients: string[] | any[];
   instructions: string[];
   familyFriendlyNote?: string;
 }
@@ -95,12 +98,16 @@ export default function MealPlanCalendar({
   };
 
   const handleShareRecipe = (meal: Meal) => {
+    const ingredientsText = (meal.ingredients || [])
+      .map((i) => (typeof i === 'string' ? `• ${i}` : `• ${i.item || i.name} (${i.amount || ''})`))
+      .join('\n');
+
     const text = `🍽️ ${meal.name} (${meal.type})
 Macros: ${meal.calories} kcal | ${meal.protein}g P | ${meal.carbs}g C | ${meal.fat}g F
-Prep Time: ${meal.prepTime || 'N/A'}
+Yield: ${meal.batchYield || '1 Serving'} | Prep Time: ${meal.prepTime || 'N/A'}
 
 Ingredients:
-${(meal.ingredients || []).map((i) => `• ${i}`).join('\n')}
+${ingredientsText}
 
 Instructions:
 ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
@@ -115,7 +122,9 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const ingredientsList = (meal.ingredients || []).map((i) => `<li>${i}</li>`).join('');
+    const ingredientsList = (meal.ingredients || [])
+      .map((i) => `<li>${typeof i === 'string' ? i : `${i.item || i.name} (${i.amount || ''})`}</li>`)
+      .join('');
     const instructionsList = (meal.instructions || []).map((inst) => `<li>${inst}</li>`).join('');
 
     printWindow.document.write(`
@@ -126,17 +135,19 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
             body { font-family: system-ui, sans-serif; padding: 20px; line-height: 1.5; color: #111; }
             h1 { margin-bottom: 4px; }
             .badge { background: #e2e8f0; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+            .batch { background: #cff4fc; color: #055160; border: 1px solid #b6effb; }
             .macros { margin: 10px 0; font-weight: bold; }
             ul, ol { padding-left: 20px; }
           </style>
         </head>
         <body>
           <span class="badge">${meal.type.toUpperCase()}</span>
+          ${meal.isBatchCooked ? '<span class="badge batch">🍱 BATCH YIELD</span>' : ''}
           <h1>${meal.name}</h1>
           <div class="macros">
             ${meal.calories} kcal | ${meal.protein}g Protein | ${meal.carbs}g Carbs | ${meal.fat}g Fat
           </div>
-          <p><strong>Prep Time:</strong> ${meal.prepTime || 'N/A'}</p>
+          <p><strong>Yield:</strong> ${meal.batchYield || '1 Single Portion'} | <strong>Prep Time:</strong> ${meal.prepTime || 'N/A'}</p>
           <hr />
           <h3>Ingredients</h3>
           <ul>${ingredientsList}</ul>
@@ -209,11 +220,15 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                           {meal.type}
                         </span>
 
-                        {meal.prepTime && (
+                        {meal.isBatchCooked ? (
+                          <span className="bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30 text-[8px] px-1 py-0.5 rounded font-bold">
+                            🍱 Batch
+                          </span>
+                        ) : meal.prepTime ? (
                           <span className="text-[9px] text-gray-400 font-mono">
                             ⏱️ {meal.prepTime}
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="font-bold text-white text-xs leading-snug line-clamp-2">
@@ -254,20 +269,31 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                           onClick={(e) => e.stopPropagation()}
                           className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]"
                         >
+                          {meal.batchYield && (
+                            <div className="bg-[#0F1724] p-1.5 rounded border border-[#1E2D4A] text-[9px]">
+                              <span className="text-gray-400 uppercase font-bold block">Yield / Portioning:</span>
+                              <span className="text-[#00F2FE] font-medium">{meal.batchYield}</span>
+                            </div>
+                          )}
+
                           <div>
                             <strong className="text-[#00F2FE] block mb-0.5">
                               Ingredients:
                             </strong>
                             <ul className="list-disc pl-3 space-y-0.5">
                               {meal.ingredients?.map((ing, iIdx) => (
-                                <li key={iIdx}>{ing}</li>
+                                <li key={iIdx}>
+                                  {typeof ing === 'string'
+                                    ? ing
+                                    : `${ing.item || ing.name} (${ing.amount || ''})`}
+                                </li>
                               ))}
                             </ul>
                           </div>
 
                           <div>
                             <strong className="text-[#00F2FE] block mb-0.5">
-                              Instructions:
+                              {meal.isBatchCooked ? 'Batch Cooking & Storage:' : 'Instructions:'}
                             </strong>
                             <ol className="list-decimal pl-3 space-y-0.5">
                               {meal.instructions?.map((inst, iIdx) => (

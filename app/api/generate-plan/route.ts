@@ -15,6 +15,7 @@ export async function POST(req: Request) {
       weeklySchedule = {},
       varietyLevel = 3,
       enableBulkPrep = false,
+      batchSessions = 2,
       maxPrepTime = 'no-limit',
       recipeHistory = [],
       isSwapRequest = false,
@@ -59,12 +60,16 @@ export async function POST(req: Request) {
 
     // Extract designated global dietary restrictions
     const isVegan = exclusionsLower.some((e) => e.includes('vegan'));
-    const isVegetarian = isVegan || exclusionsLower.some(
-      (e) => e.includes('vegetarian') || e.includes('no meat')
-    );
+    const isVegetarian =
+      isVegan ||
+      exclusionsLower.some(
+        (e) => e.includes('vegetarian') || e.includes('no meat')
+      );
     const isGlutenFree = exclusionsLower.some((e) => e.includes('gluten'));
     const isDairyFree = isVegan || exclusionsLower.some((e) => e.includes('dairy'));
-    const isKeto = exclusionsLower.some((e) => e.includes('keto') || e.includes('low carb') || e.includes('low-carb'));
+    const isKeto = exclusionsLower.some(
+      (e) => e.includes('keto') || e.includes('low carb') || e.includes('low-carb')
+    );
     const isHalal = exclusionsLower.some((e) => e.includes('halal'));
     const isKosher = exclusionsLower.some((e) => e.includes('kosher'));
 
@@ -73,7 +78,6 @@ export async function POST(req: Request) {
       'poultry', 'shrimp', 'tuna', 'cod', 'seafood', 'bacon'
     ];
 
-    // Exclude dietary flags from direct string matching to avoid false positives
     const dietaryFlags = [
       'gluten-free', 'gluten free', 'dairy-free', 'dairy free',
       'vegetarian', 'vegan', 'no meat', 'keto', 'low carb', 'low-carb',
@@ -93,11 +97,12 @@ export async function POST(req: Request) {
       targetProt: number,
       type: string,
       portionMultiplier: number = 1.0,
-      bulkPrepActive: boolean = false
+      bulkPrepActive: boolean = false,
+      occurrencesCount: number = 1
     ) => {
       const cals = targetCals || baseMeal.calories;
       const prot = targetProt || baseMeal.protein;
-      
+
       const calorieRatio = cals / (baseMeal.calories || 600);
       const combinedMultiplier = calorieRatio * portionMultiplier;
 
@@ -105,17 +110,24 @@ export async function POST(req: Request) {
         scaleIngredientString(ing, combinedMultiplier)
       );
 
-      // Dynamically calculate balanced carbs and fats relative to total calories
       const proteinCals = prot * 4;
       const remainingCals = Math.max(cals - proteinCals, 0);
-      
+
       const targetCarbs = isKeto
         ? Math.round((baseMeal.carbs || 10) * calorieRatio)
         : Math.round((remainingCals * 0.55) / 4);
-      
+
       const targetFat = isKeto
-        ? Math.round((cals - proteinCals - (targetCarbs * 4)) / 9)
+        ? Math.round((cals - proteinCals - targetCarbs * 4) / 9)
         : Math.round((remainingCals * 0.45) / 9);
+
+      let batchYieldText = '1 Single Portion';
+      if (bulkPrepActive) {
+        batchYieldText =
+          batchSessions === 1
+            ? `1 Power Prep Session • Yields ${occurrencesCount} Servings`
+            : `2 Session Split • Yields ${occurrencesCount} Servings`;
+      }
 
       return {
         ...baseMeal,
@@ -126,8 +138,12 @@ export async function POST(req: Request) {
         fat: Math.max(targetFat, 0),
         ingredients: scaledIngredients,
         rawIngredients: baseMeal.ingredients,
+        isBatchCooked: bulkPrepActive,
+        batchYield: batchYieldText,
         bulkPrepNote: bulkPrepActive
-          ? "Note: Ingredient quantities listed above represent the full batch required for your weekly bulk prep."
+          ? `Note: Quantities reflect the ${
+              batchSessions === 1 ? 'weekly power prep session' : '2 mid-week prep sessions'
+            }.`
           : null,
       };
     };
@@ -419,7 +435,12 @@ export async function POST(req: Request) {
 
     // --- SWAP REQUEST HANDLER ---
     if (isSwapRequest && swapTarget) {
-      const pool = swapTarget.type === 'Lunch' ? lunchPool : swapTarget.type === 'Dinner' ? dinnerPool : lunchPool;
+      const pool =
+        swapTarget.type === 'Lunch'
+          ? lunchPool
+          : swapTarget.type === 'Dinner'
+          ? dinnerPool
+          : lunchPool;
       const randomIndex = Math.floor(Math.random() * pool.length);
       const swappedMeal = createScaledMeal(
         pool[randomIndex],
@@ -427,7 +448,8 @@ export async function POST(req: Request) {
         swapTarget.targetProtein || 50,
         swapTarget.type,
         totalPortionWeight,
-        enableBulkPrep
+        enableBulkPrep,
+        1
       );
 
       return NextResponse.json({ swappedMeal });
@@ -444,7 +466,9 @@ export async function POST(req: Request) {
 
       Object.entries(daySchedule).forEach(([slotType, slotData]: [string, any]) => {
         if (!slotData) return;
-        const statusLower = (typeof slotData === 'string' ? slotData : slotData?.status || '').toLowerCase();
+        const statusLower = (
+          typeof slotData === 'string' ? slotData : slotData?.status || ''
+        ).toLowerCase();
         if (statusLower === 'generate') generateSlots.push(slotType);
       });
 
@@ -452,11 +476,18 @@ export async function POST(req: Request) {
 
       generateSlots.forEach((type) => {
         let baseMeal;
+        const rotateStep = enableBulkPrep ? (batchSessions === 1 ? 7 : 3) : 1;
         if (type === 'Lunch') {
-          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
+          const index =
+            Number(varietyLevel) === 1
+              ? 0
+              : Math.floor(dayIndex / rotateStep) % lunchPool.length;
           baseMeal = lunchPool[index];
         } else if (type === 'Dinner') {
-          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
+          const index =
+            Number(varietyLevel) === 1
+              ? 0
+              : Math.floor(dayIndex / rotateStep) % dinnerPool.length;
           baseMeal = dinnerPool[index];
         }
         if (baseMeal) {
@@ -482,7 +513,8 @@ export async function POST(req: Request) {
         ).toLowerCase();
 
         const isGenerate = statusLower === 'generate';
-        const isSelfProvided = statusLower.includes('self') || statusLower.includes('custom');
+        const isSelfProvided =
+          statusLower.includes('self') || statusLower.includes('custom');
 
         if (isGenerate) {
           generateSlots.push(slotType);
@@ -509,9 +541,9 @@ export async function POST(req: Request) {
         const fallbackCal = Math.round(clientCalories * (BASE_SLOT_WEIGHTS[type] || 0.25));
 
         const cal = Number(mealData.calories || mealData.cals) || fallbackCal;
-        const prot = Number(mealData.protein) || Math.round((cal * 0.30) / 4);
-        const carbs = Number(mealData.carbs) || Math.round((cal * 0.40) / 4);
-        const fat = Number(mealData.fat) || Math.round((cal * 0.30) / 9);
+        const prot = Number(mealData.protein) || Math.round((cal * 0.3) / 4);
+        const carbs = Number(mealData.carbs) || Math.round((cal * 0.4) / 4);
+        const fat = Number(mealData.fat) || Math.round((cal * 0.3) / 9);
 
         remainingCalories -= cal;
         remainingProtein -= prot;
@@ -540,17 +572,25 @@ export async function POST(req: Request) {
 
       const generatedMeals = generateSlots.map((type) => {
         const slotWeight = BASE_SLOT_WEIGHTS[type] || 0.25;
-        const ratio = totalGenerateWeight > 0 ? slotWeight / totalGenerateWeight : 1 / generateSlots.length;
+        const ratio =
+          totalGenerateWeight > 0 ? slotWeight / totalGenerateWeight : 1 / generateSlots.length;
 
         const targetCals = Math.round(remainingCalories * ratio);
         const targetProt = Math.round(remainingProtein * ratio);
 
         let baseMeal;
+        const rotateStep = enableBulkPrep ? (batchSessions === 1 ? 7 : 3) : 1;
         if (type === 'Lunch') {
-          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % lunchPool.length : dayIndex % lunchPool.length;
+          const index =
+            Number(varietyLevel) === 1
+              ? 0
+              : Math.floor(dayIndex / rotateStep) % lunchPool.length;
           baseMeal = lunchPool[index];
         } else if (type === 'Dinner') {
-          const index = Number(varietyLevel) === 1 ? 0 : enableBulkPrep ? Math.floor(dayIndex / 2) % dinnerPool.length : dayIndex % dinnerPool.length;
+          const index =
+            Number(varietyLevel) === 1
+              ? 0
+              : Math.floor(dayIndex / rotateStep) % dinnerPool.length;
           baseMeal = dinnerPool[index];
         } else {
           baseMeal = {
@@ -560,8 +600,19 @@ export async function POST(req: Request) {
             carbs: 45,
             fat: 12,
             ingredients: isVegan
-              ? ['1/2 cup Gluten-Free Rolled Oats', '1 tbsp Chia Seeds', '1/2 cup Mixed Fresh Berries', '1 cup Unsweetened Almond Milk']
-              : ['1/2 cup Egg Whites', '1 Gluten-Free Tortilla', '1/4 Whole Avocado', '1 tbsp Fresh Salsa', '1/4 tsp Salt & Pepper'],
+              ? [
+                  '1/2 cup Gluten-Free Rolled Oats',
+                  '1 tbsp Chia Seeds',
+                  '1/2 cup Mixed Fresh Berries',
+                  '1 cup Unsweetened Almond Milk',
+                ]
+              : [
+                  '1/2 cup Egg Whites',
+                  '1 Gluten-Free Tortilla',
+                  '1/4 Whole Avocado',
+                  '1 tbsp Fresh Salsa',
+                  '1/4 tsp Salt & Pepper',
+                ],
             instructions: ['Combine ingredients in a bowl or wrap into tortilla and serve.'],
             familyFriendlyNote: 'Adjustable portion sizes.',
             isVegan: isVegan,
@@ -574,9 +625,19 @@ export async function POST(req: Request) {
         }
 
         const occurrences = mealOccurrences[baseMeal.name] || 1;
-        const cardMultiplier = enableBulkPrep ? occurrences * totalPortionWeight : totalPortionWeight;
+        const cardMultiplier = enableBulkPrep
+          ? occurrences * totalPortionWeight
+          : totalPortionWeight;
 
-        const scaledMeal = createScaledMeal(baseMeal, targetCals, targetProt, type, cardMultiplier, enableBulkPrep);
+        const scaledMeal = createScaledMeal(
+          baseMeal,
+          targetCals,
+          targetProt,
+          type,
+          cardMultiplier,
+          enableBulkPrep,
+          occurrences
+        );
 
         if (enableBulkPrep) {
           if (!mealOccurrences[`added_${baseMeal.name}`]) {
@@ -601,22 +662,46 @@ export async function POST(req: Request) {
     // 5. GROCERY CONSOLIDATION & CATEGORIZATION
     const categorizeIngredient = (ingredient: string) => {
       const lower = ingredient.toLowerCase();
-      if (meatTerms.some((t) => lower.includes(t)) || lower.includes('tofu') || lower.includes('tempeh') || lower.includes('egg') || lower.includes('yogurt')) {
+      if (
+        meatTerms.some((t) => lower.includes(t)) ||
+        lower.includes('tofu') ||
+        lower.includes('tempeh') ||
+        lower.includes('egg') ||
+        lower.includes('yogurt')
+      ) {
         return 'Proteins';
       }
-      if (lower.includes('rice') || lower.includes('quinoa') || lower.includes('tortilla') || lower.includes('noodle') || lower.includes('bread') || lower.includes('potato') || lower.includes('oats')) {
+      if (
+        lower.includes('rice') ||
+        lower.includes('quinoa') ||
+        lower.includes('tortilla') ||
+        lower.includes('noodle') ||
+        lower.includes('bread') ||
+        lower.includes('potato') ||
+        lower.includes('oats')
+      ) {
         return 'Grains & Carbs';
       }
-      if (lower.includes('pepper') || lower.includes('cabbage') || lower.includes('greens') || lower.includes('cucumber') || lower.includes('broccoli') || lower.includes('asparagus') || lower.includes('peas') || lower.includes('berries') || lower.includes('avocado')) {
+      if (
+        lower.includes('pepper') ||
+        lower.includes('cabbage') ||
+        lower.includes('greens') ||
+        lower.includes('cucumber') ||
+        lower.includes('broccoli') ||
+        lower.includes('asparagus') ||
+        lower.includes('peas') ||
+        lower.includes('berries') ||
+        lower.includes('avocado')
+      ) {
         return 'Produce';
       }
       return 'Condiments & Seasonings';
     };
 
     const groupedGroceries: Record<string, Map<string, number>> = {
-      'Proteins': new Map(),
+      Proteins: new Map(),
       'Grains & Carbs': new Map(),
-      'Produce': new Map(),
+      Produce: new Map(),
       'Condiments & Seasonings': new Map(),
     };
 
@@ -625,17 +710,20 @@ export async function POST(req: Request) {
       groupedGroceries[category].set(item, count);
     });
 
-    const consolidatedGroceries = Object.entries(groupedGroceries).flatMap(([category, itemsMap]) =>
-      Array.from(itemsMap.entries()).map(([item, count]) => ({
-        category,
-        item: enableBulkPrep ? item : scaleIngredientString(item, count),
-      }))
+    const consolidatedGroceries = Object.entries(groupedGroceries).flatMap(
+      ([category, itemsMap]) =>
+        Array.from(itemsMap.entries()).map(([item, count]) => ({
+          category,
+          item: enableBulkPrep ? item : scaleIngredientString(item, count),
+        }))
     );
 
     const mockData = {
       weeklyCalendar: mockWeeklyCalendar,
       groceries: consolidatedGroceries,
-      estimatedGroceryCost: `$${Math.round(80 * totalPortionWeight)} – $${Math.round(130 * totalPortionWeight)} USD`,
+      estimatedGroceryCost: `$${Math.round(80 * totalPortionWeight)} – $${Math.round(
+        130 * totalPortionWeight
+      )} USD`,
     };
 
     return NextResponse.json(mockData);

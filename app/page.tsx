@@ -32,11 +32,13 @@ type WeeklySchedule = {
 export default function Home() {
   const [clientName, setClientName] = useState('');
 
+  // 1. Client Nutrition Layer
   const [clientCalories, setClientCalories] = useState<number | ''>('');
   const [clientProtein, setClientProtein] = useState<number | ''>('');
   const [clientExclusions, setClientExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
+  // 2. Household Scaling Layer
   const [household, setHousehold] = useState<HouseholdConfig>({
     adults: 1,
     teens: 0,
@@ -45,13 +47,16 @@ export default function Home() {
   });
   const [dislikeInput, setDislikeInput] = useState('');
 
+  // 3. Engine Preferences & Controls
   const [budget, setBudget] = useState('moderate');
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
   const [variety, setVariety] = useState(3);
   const [bulkPrep, setBulkPrep] = useState(false);
+  const [batchSessions, setBatchSessions] = useState<1 | 2>(2);
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Supabase Saving States
   const [savingPlan, setSavingPlan] = useState(false);
   const [savePlanMessage, setSavePlanMessage] = useState<string | null>(null);
 
@@ -60,6 +65,7 @@ export default function Home() {
   const [activePlanId, setActivePlanId] = useState<string>('active-plan');
   const [estimatedCost, setEstimatedCost] = useState('');
 
+  // 4. Schedule Matrix State
   const [schedule, setSchedule] = useState<WeeklySchedule>({
     MON: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
     TUE: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
@@ -247,6 +253,7 @@ export default function Home() {
           weeklySchedule: schedule,
           varietyLevel: variety,
           enableBulkPrep: bulkPrep,
+          batchSessions: bulkPrep ? batchSessions : 1,
           maxPrepTime,
           recipeHistory,
           seed: `${Date.now()}-${Math.random()}`,
@@ -315,6 +322,7 @@ export default function Home() {
           weeklySchedule: schedule,
           varietyLevel: variety,
           enableBulkPrep: bulkPrep,
+          batchSessions: bulkPrep ? batchSessions : 1,
           maxPrepTime,
           recipeHistory: combinedExclusions,
           seed: `${Date.now()}-${Math.random()}`,
@@ -401,6 +409,7 @@ export default function Home() {
 
         <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* COLUMN 1: CLIENT NUTRITION LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
               <div className="border-b border-[#1E2D4A] pb-3">
                 <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
@@ -497,6 +506,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* COLUMN 2: HOUSEHOLD SCALING LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4 flex flex-col justify-between">
               <div>
                 <div className="border-b border-[#1E2D4A] pb-3 mb-4">
@@ -626,6 +636,7 @@ export default function Home() {
             </div>
           </div>
 
+          {/* VARIETY & BATCH PREP CONTROLS */}
           <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
             <div className="border-b border-[#1E2D4A] pb-3">
               <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
@@ -661,24 +672,57 @@ export default function Home() {
                 />
               </div>
 
-              <div className="flex items-center justify-between bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl">
-                <div>
-                  <div className="text-xs font-bold text-white">Enable Batch Cooking Strategy</div>
-                  <div className="text-[10px] text-gray-400">Reuses cooked proteins/grains across consecutive lunches/dinners</div>
+              <div className="bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-white">Enable Batch Cooking Strategy</div>
+                    <div className="text-[10px] text-gray-400">Reuses cooked proteins/grains across consecutive slots</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBulkPrep(!bulkPrep)}
+                    className={`px-4 py-1.5 rounded-lg font-black text-xs transition ${
+                      bulkPrep ? 'bg-[#00F2FE] text-black' : 'bg-[#1E2D4A] text-gray-400'
+                    }`}
+                  >
+                    {bulkPrep ? 'ENABLED' : 'DISABLED'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setBulkPrep(!bulkPrep)}
-                  className={`px-4 py-1.5 rounded-lg font-black text-xs transition ${
-                    bulkPrep ? 'bg-[#00F2FE] text-black' : 'bg-[#1E2D4A] text-gray-400'
-                  }`}
-                >
-                  {bulkPrep ? 'ENABLED' : 'DISABLED'}
-                </button>
+
+                {bulkPrep && (
+                  <div className="pt-2 border-t border-[#1E2D4A] flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Prep Frequency:</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBatchSessions(1)}
+                        className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
+                          batchSessions === 1
+                            ? 'bg-[#00F2FE]/20 text-[#00F2FE] border border-[#00F2FE]'
+                            : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
+                        }`}
+                      >
+                        1 Session (Sunday All-In)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBatchSessions(2)}
+                        className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
+                          batchSessions === 2
+                            ? 'bg-[#00F2FE]/20 text-[#00F2FE] border border-[#00F2FE]'
+                            : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
+                        }`}
+                      >
+                        2 Sessions (Sun / Wed Split)
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
+          {/* SCHEDULE MATRIX */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
