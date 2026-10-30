@@ -210,6 +210,7 @@ export default function Home() {
             estimatedCost,
             household,
             portionWeight: totalPortionWeight,
+            budgetLevel: budget,
           },
           created_at: new Date().toISOString(),
         })
@@ -942,13 +943,15 @@ export default function Home() {
               {/* CALENDAR DISPLAY */}
               <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
 
-              {/* GROCERY LIST CHECKLIST */}
+              {/* GROCERY LIST CHECKLIST FIXED PARSER */}
               <div className="pt-6 border-t border-[#1E2D4A]">
                 <GroceryChecklist
                   planId={activePlanId}
                   planTitle={clientName ? `${clientName}'s Grocery List` : 'Active Grocery List'}
-                  initialItems={weeklyCalendar.flatMap((day) =>
-                    day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
+                  initialItems={parseIngredientsToGroceryList(
+                    weeklyCalendar.flatMap((day) =>
+                      day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
+                    )
                   )}
                 />
               </div>
