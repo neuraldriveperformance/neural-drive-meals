@@ -3,220 +3,257 @@
 import React, { useState, useEffect } from 'react';
 import {
   GroceryItem,
-  AISLE_CATEGORIES,
   parseIngredientsToGroceryList,
   saveGroceryChecklist,
   getGroceryChecklist,
 } from '@/lib/grocery';
 
-interface GroceryChecklistProps {
-  planId?: string;
+interface Props {
+  planId: string;
   planTitle?: string;
-  rawIngredients?: string[];
+  rawIngredients?: any[];
   initialItems?: GroceryItem[];
   onDelete?: () => void;
 }
 
 export default function GroceryChecklist({
-  planId = 'default-plan',
-  planTitle = 'Weekly Grocery Checklist',
-  rawIngredients = [],
+  planId,
+  planTitle = 'Weekly Grocery List',
+  rawIngredients,
   initialItems,
   onDelete,
-}: GroceryChecklistProps) {
+}: Props) {
   const [items, setItems] = useState<GroceryItem[]>(initialItems || []);
-  const [customItemInput, setCustomItemInput] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState<boolean>(!initialItems);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('Pantry & Other');
+  const [newItemAmount, setNewItemAmount] = useState('');
+
+  const categories = [
+    'Meat & Seafood',
+    'Produce',
+    'Dairy & Eggs',
+    'Grains & Bakery',
+    'Pantry & Other',
+  ];
 
   useEffect(() => {
     async function initChecklist() {
-      if (initialItems && initialItems.length > 0) {
-        setItems(initialItems);
-        return;
-      }
-
-      if (planId) {
-        const savedItems = await getGroceryChecklist(planId);
-        if (savedItems && savedItems.length > 0) {
-          setItems(savedItems);
-          return;
-        }
-      }
-
-      if (rawIngredients.length > 0) {
+      setLoading(true);
+      const saved = await getGroceryChecklist(planId);
+      if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
+        setItems(saved.items);
+      } else if (rawIngredients && rawIngredients.length > 0) {
         const parsed = parseIngredientsToGroceryList(rawIngredients);
         setItems(parsed);
-        if (planId) {
-          await saveGroceryChecklist(planId, parsed, planTitle);
-        }
+        await saveGroceryChecklist(planId, parsed, planTitle);
       }
+      setLoading(false);
     }
 
-    initChecklist();
-  }, [planId, rawIngredients, initialItems]);
+    if (!initialItems) {
+      initChecklist();
+    } else {
+      setItems(initialItems);
+      setLoading(false);
+    }
+  }, [planId, rawIngredients, initialItems, planTitle]);
 
-  const handleToggleItem = async (itemId: string) => {
+  const toggleItem = async (itemId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const updated = items.map((item) =>
       item.id === itemId ? { ...item, checked: !item.checked } : item
     );
     setItems(updated);
-
-    if (planId) {
-      setIsSaving(true);
-      await saveGroceryChecklist(planId, updated, planTitle);
-      setIsSaving(false);
-    }
+    setSaving(true);
+    await saveGroceryChecklist(planId, updated, planTitle);
+    setSaving(false);
   };
 
-  const handleAddCustomItem = async (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customItemInput.trim()) return;
+    if (!newItemName.trim()) return;
 
     const newItem: GroceryItem = {
       id: `custom-${Date.now()}`,
-      name: customItemInput.trim(),
-      category: 'Other / Custom',
+      name: newItemName.trim(),
+      category: newItemCategory,
+      amount: newItemAmount.trim(),
       checked: false,
-      isCustom: true,
     };
 
     const updated = [...items, newItem];
     setItems(updated);
-    setCustomItemInput('');
-
-    if (planId) {
-      setIsSaving(true);
-      await saveGroceryChecklist(planId, updated, planTitle);
-      setIsSaving(false);
-    }
+    setNewItemName('');
+    setNewItemAmount('');
+    setSaving(true);
+    await saveGroceryChecklist(planId, updated, planTitle);
+    setSaving(false);
   };
 
-  const handleResetChecklist = async () => {
-    const reset = items.map((item) => ({ ...item, checked: false }));
-    setItems(reset);
-
-    if (planId) {
-      setIsSaving(true);
-      await saveGroceryChecklist(planId, reset, planTitle);
-      setIsSaving(false);
-    }
+  const handleClearChecked = async () => {
+    const updated = items.filter((i) => !i.checked);
+    setItems(updated);
+    setSaving(true);
+    await saveGroceryChecklist(planId, updated, planTitle);
+    setSaving(false);
   };
 
-  const totalCount = items.length;
   const checkedCount = items.filter((i) => i.checked).length;
+  const totalCount = items.length;
   const progressPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
-  return (
-    <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-4 sm:p-6 space-y-6">
-      {/* HEADER & PROGRESS BAR */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-black text-white flex items-center gap-2">
-              🛒 Store-Ready Grocery Matrix
-              {isSaving && <span className="text-xs text-amber-400 font-normal">Saving...</span>}
-            </h2>
-            <p className="text-xs text-slate-400">
-              Interactive store checklist—progress saves automatically on your phone.
-            </p>
-          </div>
+  if (loading) {
+    return (
+      <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 text-center text-xs text-gray-400">
+        Loading interactive grocery list...
+      </div>
+    );
+  }
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleResetChecklist}
-              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition"
-            >
-              Reset All
-            </button>
-            {onDelete && (
-              <button
-                onClick={onDelete}
-                className="text-xs bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 px-3 py-1.5 rounded-lg transition"
-              >
-                🗑️ Delete List
-              </button>
-            )}
-          </div>
+  return (
+    <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-6">
+      {/* HEADER & CONTROLS */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#1E2D4A] pb-4">
+        <div>
+          <h3 className="text-base font-black text-white flex items-center gap-2">
+            <span>🛒</span> {planTitle}
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Deduplicated and categorized by store aisle for efficient shopping.
+          </p>
         </div>
 
-        {/* Completion Bar */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs font-mono">
-            <span className="text-slate-400">Cart Progress</span>
-            <span className="text-[#00F2FE] font-bold">
-              {checkedCount} / {totalCount} Items ({progressPercent}%)
+        <div className="flex items-center gap-3">
+          {checkedCount > 0 && (
+            <button
+              onClick={handleClearChecked}
+              className="text-xs text-rose-400 hover:text-rose-300 border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 rounded-lg transition"
+            >
+              Clear Checked ({checkedCount})
+            </button>
+          )}
+          {saving && (
+            <span className="text-[11px] text-[#00F2FE] animate-pulse font-mono">
+              Saving...
             </span>
-          </div>
-          <div className="w-full bg-slate-900 h-2.5 rounded-full border border-[#1E2D4A] overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+          )}
         </div>
       </div>
 
-      {/* CATEGORIZED STORE AISLES */}
-      <div className="space-y-5">
-        {AISLE_CATEGORIES.map((category) => {
-          const categoryItems = items.filter((i) => i.category === category);
+      {/* PROGRESS BAR */}
+      <div className="space-y-2">
+        <div className="flex justify-between items-center text-xs">
+          <span className="text-gray-400">
+            Shopping Progress: <strong className="text-white">{checkedCount}</strong> / {totalCount} items completed
+          </span>
+          <span className="text-[#00F2FE] font-mono font-bold">{progressPercent}%</span>
+        </div>
+        <div className="w-full bg-[#162032] h-2.5 rounded-full overflow-hidden border border-[#1E2D4A]">
+          <div
+            className="bg-[#00F2FE] h-full transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {/* ADD CUSTOM ITEM FORM */}
+      <form onSubmit={handleAddItem} className="bg-[#162032] border border-[#1E2D4A] p-3 rounded-xl flex flex-col sm:flex-row gap-2 items-center">
+        <input
+          type="text"
+          placeholder="Add extra item (e.g. Paper towels)"
+          value={newItemName}
+          onChange={(e) => setNewItemName(e.target.value)}
+          className="flex-1 bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F2FE] w-full"
+        />
+        <input
+          type="text"
+          placeholder="Amount (optional)"
+          value={newItemAmount}
+          onChange={(e) => setNewItemAmount(e.target.value)}
+          className="w-full sm:w-32 bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
+        />
+        <select
+          value={newItemCategory}
+          onChange={(e) => setNewItemCategory(e.target.value)}
+          className="w-full sm:w-40 bg-[#0F1724] border border-[#1E2D4A] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#00F2FE]"
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="w-full sm:w-auto bg-[#00F2FE] hover:bg-cyan-400 text-black font-black px-4 py-1.5 rounded-lg text-xs transition"
+        >
+          + Add
+        </button>
+      </form>
+
+      {/* CATEGORIZED LIST GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {categories.map((cat) => {
+          const categoryItems = items.filter((i) => i.category === cat);
           if (categoryItems.length === 0) return null;
 
           return (
-            <div key={category} className="space-y-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#00F2FE] border-b border-[#1E2D4A] pb-1">
-                {category} ({categoryItems.length})
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div key={cat} className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-4 space-y-3">
+              <div className="flex justify-between items-center border-b border-[#1E2D4A] pb-2">
+                <h4 className="text-xs font-black uppercase text-[#00F2FE] tracking-wider">
+                  {cat}
+                </h4>
+                <span className="text-[10px] text-gray-400 font-mono">
+                  {categoryItems.filter((i) => i.checked).length}/{categoryItems.length}
+                </span>
+              </div>
+              <ul className="space-y-2">
                 {categoryItems.map((item) => (
-                  <label
+                  <li
                     key={item.id}
-                    onClick={() => handleToggleItem(item.id)}
-                    className={`flex items-center space-x-3 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                    onClick={(e) => toggleItem(item.id, e)}
+                    className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer select-none transition border ${
                       item.checked
-                        ? 'bg-slate-900/60 border-slate-800 text-slate-500 line-through'
-                        : 'bg-[#162032] border-[#1E2D4A] hover:border-[#00F2FE]/50 text-slate-200'
+                        ? 'bg-[#0F1724]/40 border-transparent opacity-60'
+                        : 'bg-[#0F1724] border-[#1E2D4A] hover:border-[#00F2FE]/50'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={item.checked}
                       onChange={() => {}}
-                      className="w-4 h-4 rounded border-slate-700 text-cyan-500 focus:ring-0 focus:ring-offset-0 bg-slate-950"
+                      className="mt-0.5 w-4 h-4 rounded border-[#1E2D4A] bg-[#0F1724] text-[#00F2FE] focus:ring-0 cursor-pointer"
                     />
-                    <span className="text-xs font-medium leading-snug flex-1">
-                      {item.name}
-                      {item.isCustom && (
-                        <span className="ml-1.5 text-[9px] bg-cyan-950 text-cyan-400 border border-cyan-800 px-1 py-0.2 rounded">
-                          Custom
+                    <div className="flex-1 text-xs leading-tight">
+                      <span className={item.checked ? 'line-through text-gray-500' : 'text-gray-200 font-medium'}>
+                        {item.name}
+                      </span>
+                      {item.amount && (
+                        <span className="block text-[10px] text-[#00F2FE]/80 font-mono mt-0.5">
+                          {item.amount}
                         </span>
                       )}
-                    </span>
-                  </label>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           );
         })}
       </div>
 
-      {/* QUICK ADD CUSTOM ITEM FORM */}
-      <form onSubmit={handleAddCustomItem} className="pt-2 border-t border-[#1E2D4A] flex gap-2">
-        <input
-          type="text"
-          value={customItemInput}
-          onChange={(e) => setCustomItemInput(e.target.value)}
-          placeholder="Add extra item (e.g., Paper Towels, Protein Bars)..."
-          className="flex-1 bg-slate-950 border border-[#1E2D4A] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00F2FE]"
-        />
-        <button
-          type="submit"
-          className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition"
-        >
-          + Add
-        </button>
-      </form>
+      {onDelete && (
+        <div className="flex justify-end pt-4 border-t border-[#1E2D4A]">
+          <button
+            onClick={onDelete}
+            className="text-xs text-rose-400 hover:text-rose-300 hover:underline"
+          >
+            Remove Checklist
+          </button>
+        </div>
+      )}
     </div>
   );
 }
