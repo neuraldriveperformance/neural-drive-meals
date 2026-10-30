@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Ensure route is dynamic to prevent missing API key errors during Next.js static builds
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    // Instantiate OpenAI lazily inside the POST handler
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
     const body = await req.json();
 
     const {
