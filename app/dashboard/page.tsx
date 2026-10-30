@@ -50,10 +50,9 @@ export default function DashboardPage() {
         setSavedRecipes(recipesData);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-      } font-sans finally {
+      } finally {
         setLoading(false);
       }
-    }
 
     fetchDashboardData();
   }, []);
