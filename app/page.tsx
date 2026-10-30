@@ -183,7 +183,7 @@ export default function Home() {
         ? `${clientName}'s Weekly Performance Plan`
         : 'Weekly Performance Meal Plan';
 
-      // 1. Save Meal Plan
+      // 1. Insert saved plan and retrieve the created record ID
       const { data: insertedPlan, error: planError } = await supabase
         .from('saved_plans')
         .insert({
@@ -202,13 +202,13 @@ export default function Home() {
 
       if (planError) throw planError;
 
-      // 2. Extract & Parse Ingredients
+      // 2. Parse ingredients from generated calendar
       const rawIngredients = weeklyCalendar.flatMap((day) =>
         day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
       );
       const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients);
 
-      // 3. Upsert linked Grocery Checklist using the saved plan's ID
+      // 3. Save grocery list using the exact inserted plan ID
       const targetPlanId = insertedPlan?.id || activePlanId;
       const checklistTitle = clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List';
       
