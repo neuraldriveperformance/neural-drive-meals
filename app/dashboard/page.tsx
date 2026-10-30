@@ -50,7 +50,7 @@ export default function DashboardPage() {
         setSavedRecipes(recipesData);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-      } finally {
+      } font-sans finally {
         setLoading(false);
       }
     }
@@ -145,7 +145,7 @@ export default function DashboardPage() {
         </button>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto p-6 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Your Saved Library</h1>
@@ -209,10 +209,9 @@ export default function DashboardPage() {
           </div>
         ) : activeTab === 'plans' ? (
           savedPlans.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-6">
               {savedPlans.map((plan) => {
                 const calendar = plan.plan_data?.calendar || plan.calendar || [];
-                const firstDay = calendar[0];
 
                 return (
                   <div
@@ -220,76 +219,99 @@ export default function DashboardPage() {
                     className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-4"
                   >
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h2 className="font-bold text-lg text-slate-100">
-                          {plan.title || 'Weekly Performance Meal Plan'}
-                        </h2>
-                        <span className="text-xs text-slate-500 font-mono">
-                          {new Date(plan.created_at).toLocaleDateString()}
+                      <div className="flex flex-wrap items-center justify-between mb-2 gap-2">
+                        <div>
+                          <h2 className="font-bold text-lg text-slate-100">
+                            {plan.title || 'Weekly Performance Meal Plan'}
+                          </h2>
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            {calendar.length || 7}-Day Custom Performance Protocol
+                            {plan.plan_data?.estimatedCost ? ` • ${plan.plan_data.estimatedCost}` : ''}
+                            {plan.plan_data?.budgetLevel ? ` • ${plan.plan_data.budgetLevel.toUpperCase()} Budget` : ''}
+                          </p>
+                        </div>
+                        <span className="text-xs text-slate-500 font-mono bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                          📅 {new Date(plan.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-slate-400 text-xs mb-3">
-                        {calendar.length || 7}-Day Custom Performance Protocol
-                        {plan.plan_data?.estimatedCost ? ` • ${plan.plan_data.estimatedCost}` : ''}
-                      </p>
 
-                      {/* ENHANCED INLINE PREVIEW GRID */}
-                      {firstDay && (
-                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2">
-                          <div className="flex justify-between items-center text-[11px] font-bold text-cyan-400 border-b border-slate-800 pb-1">
-                            <span>DAY 1 PREVIEW ({firstDay.day || 'Day 1'})</span>
-                            {firstDay.totalCalories && (
-                              <span className="text-slate-400">{firstDay.totalCalories} kcal</span>
-                            )}
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            {firstDay.meals && Object.entries(firstDay.meals).map(([mealType, meal]: [string, any]) => {
-                              if (!meal) return null;
-                              return (
-                                <div key={mealType} className="bg-slate-900 p-2 rounded border border-slate-800/60">
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-cyan-400 block mb-0.5">
-                                    {mealType}
-                                  </span>
-                                  <p className="font-semibold text-slate-200 text-xs truncate">
-                                    {meal.name || meal.title || 'Meal'}
-                                  </p>
-                                  {(meal.calories || meal.protein) && (
-                                    <p className="text-[10px] text-slate-400 mt-1">
-                                      {meal.calories ? `${meal.calories} kcal` : ''}
-                                      {meal.calories && meal.protein ? ' • ' : ''}
-                                      {meal.protein ? `${meal.protein}g P` : ''}
-                                    </p>
-                                  )}
+                      {/* FULL UNCOMPRESSED WEEKLY CALENDAR OVERVIEW */}
+                      {calendar.length > 0 && (
+                        <div className="mt-4 bg-slate-950/80 border border-slate-800 rounded-xl p-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                            {calendar.map((dayObj: any) => (
+                              <div
+                                key={dayObj.day}
+                                className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5 space-y-2 flex flex-col justify-between"
+                              >
+                                <div className="text-center font-extrabold text-cyan-400 text-xs border-b border-slate-800 pb-1">
+                                  {dayObj.day}
                                 </div>
-                              );
-                            })}
+
+                                <div className="space-y-2 flex-1">
+                                  {dayObj.meals &&
+                                    (Array.isArray(dayObj.meals)
+                                      ? dayObj.meals
+                                      : Object.entries(dayObj.meals).map(([type, data]: [string, any]) => ({
+                                          type,
+                                          ...data,
+                                        }))
+                                    ).map((meal: any, idx: number) => {
+                                      if (!meal) return null;
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className="bg-slate-950/90 border border-slate-800 p-2 rounded text-left space-y-1"
+                                        >
+                                          <div className="flex justify-between items-center text-[9px] font-extrabold text-cyan-400">
+                                            <span className="uppercase">{meal.type}</span>
+                                            {meal.calories ? (
+                                              <span className="text-slate-400 font-normal">{meal.calories} kcal</span>
+                                            ) : null}
+                                          </div>
+
+                                          {/* FULL UNCOMPRESSED MEAL TITLE */}
+                                          <div className="text-xs font-semibold text-slate-100 leading-snug whitespace-normal break-words">
+                                            {meal.name || meal.title || 'Meal'}
+                                          </div>
+
+                                          {(meal.protein !== undefined || meal.carbs !== undefined || meal.fat !== undefined) && (
+                                            <div className="text-[10px] text-slate-400 font-mono pt-0.5 border-t border-slate-800/50">
+                                              P: {meal.protein ?? '-'}g | C: {meal.carbs ?? '-'}g | F: {meal.fat ?? '-'}g
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
                     </div>
 
                     <div className="flex justify-between items-center border-t border-slate-800 pt-3">
-                      <div className="flex gap-3">
+                      <div className="flex gap-4">
                         <button
                           onClick={() => setSelectedPlan(plan)}
                           className="text-cyan-400 hover:text-cyan-300 text-xs font-semibold flex items-center gap-1"
                         >
-                          👁️ View Full Calendar Details
+                          👁️ View Full Calendar & Interactive Swaps
                         </button>
                         <button
                           onClick={() => setActiveTab('groceries')}
                           className="text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center gap-1"
                         >
-                          🛒 Grocery List
+                          🛒 Jump to Grocery List
                         </button>
                       </div>
 
                       <button
                         onClick={() => handleDeletePlan(plan.id)}
-                        className="text-xs text-rose-400 hover:underline"
+                        className="text-xs text-rose-400 hover:underline font-semibold"
                       >
-                        Delete
+                        Delete Plan
                       </button>
                     </div>
                   </div>
@@ -358,7 +380,7 @@ export default function DashboardPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-bold text-white">
+                            <h3 className="text-sm font-bold text-white whitespace-normal break-words">
                               {checklist.plan_title || `Grocery List (${formattedDate})`}
                             </h3>
                             <button
@@ -438,7 +460,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
-                  <h3 className="font-semibold text-white text-sm leading-snug">
+                  <h3 className="font-semibold text-white text-sm leading-snug whitespace-normal break-words">
                     {recipe.recipe_name}
                   </h3>
 
@@ -472,12 +494,13 @@ export default function DashboardPage() {
         )}
       </main>
 
+      {/* FULL PROTOCOL MODAL */}
       {selectedPlan && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-[95vw] w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-slate-800 pb-4">
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-white whitespace-normal break-words">
                   {selectedPlan.title || 'Weekly Protocol'}
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
@@ -493,7 +516,10 @@ export default function DashboardPage() {
             </div>
 
             {(selectedPlan.plan_data?.calendar || selectedPlan.calendar) && (
-              <MealPlanCalendar calendarDays={selectedPlan.plan_data?.calendar || selectedPlan.calendar} />
+              <MealPlanCalendar 
+                calendarDays={selectedPlan.plan_data?.calendar || selectedPlan.calendar} 
+                isModal={true}
+              />
             )}
 
             <div className="pt-4 border-t border-slate-800 flex justify-end">
@@ -513,7 +539,9 @@ export default function DashboardPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-slate-800 pb-3">
               <div>
-                <h2 className="text-lg font-bold text-white">{selectedRecipe.recipe_name}</h2>
+                <h2 className="text-lg font-bold text-white whitespace-normal break-words">
+                  {selectedRecipe.recipe_name}
+                </h2>
                 <p className="text-xs text-cyan-400">{selectedRecipe.meal_type}</p>
               </div>
               <button
@@ -544,7 +572,7 @@ export default function DashboardPage() {
                 <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Ingredients</h4>
                 <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
                   {selectedRecipe.ingredients.map((ing: any, i: number) => (
-                    <li key={i}>
+                    <li key={i} className="whitespace-normal break-words">
                       {typeof ing === 'string'
                         ? ing
                         : `${ing.item || ing.name} (${ing.amount || ''})`}
@@ -560,7 +588,7 @@ export default function DashboardPage() {
                   <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Instructions</h4>
                   <ol className="list-decimal list-inside text-xs text-slate-300 space-y-1">
                     {selectedRecipe.instructions.map((step: string, i: number) => (
-                      <li key={i}>{step}</li>
+                      <li key={i} className="whitespace-normal break-words">{step}</li>
                     ))}
                   </ol>
                 </div>

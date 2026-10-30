@@ -25,9 +25,10 @@ export interface DayPlan {
 }
 
 interface MealPlanCalendarProps {
-  calendarDays: DayPlan[];
-  onSwapMeal?: (day: string, mealType: string) => Promise<void> | void;
+  calendarDays: any[];
+  onSwapMeal?: (day: string, type: string) => void;
   onSelectMeal?: (meal: Meal) => void;
+  isModal?: boolean;
 }
 
 const MEAL_ORDER: { [key: string]: number } = {
@@ -42,6 +43,7 @@ export default function MealPlanCalendar({
   calendarDays,
   onSwapMeal,
   onSelectMeal,
+  isModal = false,
 }: MealPlanCalendarProps) {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [swappingMealId, setSwappingMealId] = useState<string | null>(null);
@@ -216,22 +218,33 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                     >
                       {/* CARD HEADER */}
                       <div className="flex justify-between items-center gap-1">
-                        <span className="font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A] truncate">
+                        <span
+                          className={`font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A] ${
+                            isModal ? 'whitespace-normal' : 'truncate'
+                          }`}
+                        >
                           {meal.type}
                         </span>
 
                         {meal.isBatchCooked ? (
-                          <span className="bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30 text-[8px] px-1 py-0.5 rounded font-bold">
+                          <span className="bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30 text-[8px] px-1 py-0.5 rounded font-bold flex-shrink-0">
                             🍱 Batch
                           </span>
                         ) : meal.prepTime ? (
-                          <span className="text-[9px] text-gray-400 font-mono">
+                          <span className="text-[9px] text-gray-400 font-mono flex-shrink-0">
                             ⏱️ {meal.prepTime}
                           </span>
                         ) : null}
                       </div>
 
-                      <div className="font-bold text-white text-xs leading-snug line-clamp-2">
+                      {/* MEAL TITLE - CONDITIONAL TRUNCATION */}
+                      <div
+                        className={`font-bold text-white text-xs leading-snug ${
+                          isModal
+                            ? 'whitespace-normal break-words py-0.5'
+                            : 'line-clamp-2'
+                        }`}
+                      >
                         {meal.name}
                       </div>
 
@@ -282,7 +295,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                             </strong>
                             <ul className="list-disc pl-3 space-y-0.5">
                               {meal.ingredients?.map((ing, iIdx) => (
-                                <li key={iIdx}>
+                                <li key={iIdx} className="whitespace-normal break-words">
                                   {typeof ing === 'string'
                                     ? ing
                                     : `${ing.item || ing.name} (${ing.amount || ''})`}
@@ -297,7 +310,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                             </strong>
                             <ol className="list-decimal pl-3 space-y-0.5">
                               {meal.instructions?.map((inst, iIdx) => (
-                                <li key={iIdx}>{inst}</li>
+                                <li key={iIdx} className="whitespace-normal break-words">{inst}</li>
                               ))}
                             </ol>
                           </div>
