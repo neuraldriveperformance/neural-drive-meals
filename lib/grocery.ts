@@ -24,98 +24,129 @@ const getSupabase = () =>
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
+// --- HELPER FUNCTIONS FOR CLEANING & COMBINING INGREDIENTS ---
+
+function normalizeItemName(rawName: string): string {
+  let name = rawName.toLowerCase();
+
+  // Strip common modifiers (comma separated or standalone words)
+  name = name.replace(/,\s*(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry)/g, '');
+  name = name.replace(/\b(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry)\b/g, '');
+  name = name.replace(/\s+/g, ' ').trim();
+
+  // Return formatted Title Case
+  return name.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function determineCategory(name: string, fallbackCategory = 'Pantry & Other'): string {
+  if (fallbackCategory !== 'Pantry & Other') return fallbackCategory;
+  
+  const lower = name.toLowerCase();
+  if (/\b(chicken|beef|steak|turkey|salmon|shrimp|pork|fish|egg|eggs|tofu|tempeh)\b/.test(lower)) {
+    return 'Meat & Seafood';
+  }
+  if (/\b(spinach|kale|onion|garlic|pepper|peppers|broccoli|tomato|lemon|lime|avocado|berry|berries|apple|cilantro)\b/.test(lower)) {
+    return 'Produce';
+  }
+  if (/\b(milk|cheese|yogurt|butter|cream)\b/.test(lower)) {
+    return 'Dairy & Eggs';
+  }
+  if (/\b(rice|oats|quinoa|bread|pasta|tortilla|tortillas|barley|grits)\b/.test(lower)) {
+    return 'Grains & Bakery';
+  }
+  return 'Pantry & Other';
+}
+
 export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryItem[] {
-  const map = new Map<string, { amount: string; category: string }>();
+  // Map key format: "NormalizedName_unit"
+  const map = new Map<string, { totalQuantity: number; unit: string; category: string; originalName: string }>();
 
   rawIngredients.forEach((ing) => {
-    let name = '';
-    let amount = '';
-    let category = 'Pantry & Other';
+    let rawStr = '';
+    let explicitAmount = '';
+    let categoryInput = 'Pantry & Other';
 
     if (typeof ing === 'string') {
-      name = ing.trim();
+      rawStr = ing.trim();
     } else if (ing && typeof ing === 'object') {
-      name = (ing.item || ing.name || '').trim();
-      amount = ing.amount || ing.quantity || '';
-      if (ing.category) category = ing.category;
+      rawStr = (ing.item || ing.name || '').trim();
+      explicitAmount = ing.amount || ing.quantity || '';
+      if (ing.category) categoryInput = ing.category;
     }
 
-    if (!name) return;
+    if (!rawStr || rawStr.includes('Self-provided')) return;
 
-    const lower = name.toLowerCase();
-    if (category === 'Pantry & Other') {
-      if (
-        lower.includes('chicken') ||
-        lower.includes('beef') ||
-        lower.includes('steak') ||
-        lower.includes('turkey') ||
-        lower.includes('salmon') ||
-        lower.includes('shrimp') ||
-        lower.includes('pork') ||
-        lower.includes('fish') ||
-        lower.includes('egg')
-      ) {
-        category = 'Meat & Seafood';
-      } else if (
-        lower.includes('spinach') ||
-        lower.includes('kale') ||
-        lower.includes('onion') ||
-        lower.includes('garlic') ||
-        lower.includes('pepper') ||
-        lower.includes('broccoli') ||
-        lower.includes('tomato') ||
-        lower.includes('lemon') ||
-        lower.includes('avocado') ||
-        lower.includes('berry') ||
-        lower.includes('apple')
-      ) {
-        category = 'Produce';
-      } else if (
-        lower.includes('milk') ||
-        lower.includes('cheese') ||
-        lower.includes('yogurt') ||
-        lower.includes('butter') ||
-        lower.includes('cream')
-      ) {
-        category = 'Dairy & Eggs';
-      } else if (
-        lower.includes('rice') ||
-        lower.includes('oats') ||
-        lower.includes('quinoa') ||
-        lower.includes('bread') ||
-        lower.includes('pasta') ||
-        lower.includes('tortilla')
-      ) {
-        category = 'Grains & Bakery';
+    // Combine explicit amount and item string if separate, e.g. "1.4 Cup" + "Cooked Quinoa"
+    const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
+
+    // Regex to match quantity (digits/fractions), optional unit, and remaining ingredient name
+    const match = fullText.match(/^([\d\.\/]+)\s*([A-Za-z]+)?\s+(.*)$/);
+
+    if (match) {
+      let qty = 0;
+      const rawQty = match[1];
+      const rawUnit = match[2] ? match[2].trim() : '';
+      const rawItemName = match[3] ? match[3].trim() : fullText;
+
+      if (rawQty.includes('/')) {
+        const [num, den] = rawQty.split('/');
+        qty = parseFloat(num) / parseFloat(den);
+      } else {
+        qty = parseFloat(rawQty);
       }
-    }
 
-    const key = lower;
-    if (map.has(key)) {
-      const existing = map.get(key)!;
-      map.set(key, {
-        amount: existing.amount ? `${existing.amount}, ${amount}` : amount,
-        category: existing.category || category,
-      });
+      const normalized = normalizeItemName(rawItemName);
+      const category = determineCategory(normalized, categoryInput);
+      const key = `${normalized}_${rawUnit.toLowerCase()}`;
+
+      if (map.has(key)) {
+        const existing = map.get(key)!;
+        existing.totalQuantity += qty;
+      } else {
+        map.set(key, {
+          totalQuantity: qty,
+          unit: rawUnit,
+          category,
+          originalName: normalized,
+        });
+      }
     } else {
-      map.set(key, { amount, category });
+      // Fallback when no numeric quantity is found
+      const normalized = normalizeItemName(rawStr);
+      const category = determineCategory(normalized, categoryInput);
+      const key = `${normalized}_nounit`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          totalQuantity: 1,
+          unit: '',
+          category,
+          originalName: normalized,
+        });
+      }
     }
   });
 
   const items: GroceryItem[] = [];
   let index = 1;
-  map.forEach((value, key) => {
+
+  map.forEach((val) => {
+    const roundedQty = parseFloat(val.totalQuantity.toFixed(2));
+    const amountStr = val.unit ? `${roundedQty} ${val.unit}` : `${roundedQty}`;
+
     items.push({
       id: `item-${index++}-${Date.now()}`,
-      name: key.replace(/\b\w/g, (c) => c.toUpperCase()),
-      category: value.category,
-      amount: value.amount,
+      name: val.originalName,
+      category: val.category,
+      amount: amountStr,
       checked: false,
     });
   });
 
   return items;
 }
+
+// --- SUPABASE PERSISTENCE FUNCTIONS ---
 
 export async function saveGroceryChecklist(
   planId: string,

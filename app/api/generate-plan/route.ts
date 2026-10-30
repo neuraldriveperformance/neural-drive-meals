@@ -161,8 +161,8 @@ export async function POST(req: Request) {
     };
 
     // MAP BUDGET LEVELS TO EXPLICIT CULINARY DIRECTIVES
-    const budgetGuidelines: Record<string, string> = {
-      low: 'LOW BUDGET / ECONOMY: Prioritize highly affordable, cost-effective staples (e.g., canned beans, lentils, frozen veggies, eggs, oats, bulk rice, ground turkey, chicken thighs, canned tuna). Avoid expensive cuts of meat, fresh berries out of season, or specialty artisan products.',
+      const budgetGuidelines: Record<string, string> = {
+      low: 'LOW BUDGET / ECONOMY & MINIMAL INGREDIENTS: Prioritize highly affordable, cost-effective staples and MAXIMIZE INGREDIENT OVERLAP across all recipes to keep shopping costs minimal. Standardize on 5-8 core ingredients across the entire week (e.g., bulk oats, eggs, canned black beans, rice, chicken thighs, frozen broccoli). Avoid introducing obscure or single-recipe spices/produce.',
       moderate: 'MODERATE BUDGET / STANDARD: Balanced approach with accessible whole foods, standard lean proteins (e.g., chicken breast, 93/7 ground beef, tofu, salmon fillets), fresh seasonal produce, and everyday grains.',
       high: 'HIGH BUDGET / PREMIUM: Gourmet/premium ingredients (e.g., ribeye steak, wild-caught salmon, organic produce, fresh berries, specialty cheeses, artisan grains, avocado, nuts, fresh herbs).',
     };

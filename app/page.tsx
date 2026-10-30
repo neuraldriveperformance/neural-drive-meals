@@ -958,6 +958,28 @@ export default function Home() {
             </div>
           </div>
         )}
+        {/* GENERATION LOADING OVERLAY */}
+        {loading && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 space-y-6">
+            <div className="relative w-20 h-20">
+              <div className="absolute inset-0 rounded-full border-4 border-[#1E2D4A]" />
+              <div className="absolute inset-0 rounded-full border-4 border-[#00F2FE] border-t-transparent animate-spin" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-black text-[#00F2FE] tracking-wide animate-pulse">
+                GENERATING PRECISION PROTOCOL
+              </h3>
+              <p className="text-xs text-gray-400 max-w-sm">
+                Analyzing client macros, scaling household portions, and applying budget constraints...
+              </p>
+            </div>
+
+            <div className="w-64 bg-[#162032] border border-[#1E2D4A] h-2 rounded-full overflow-hidden">
+              <div className="bg-[#00F2FE] h-full w-full animate-pulse" />
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
