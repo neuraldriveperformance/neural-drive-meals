@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function POST(req: Request) {
   try {
@@ -62,7 +67,7 @@ export async function POST(req: Request) {
       ...(household?.familyDislikes || []),
     ].filter(Boolean);
 
-    const exclusionsLower = rawExclusions.map((e) => e.toLowerCase().trim());
+    const exclusionsLower = rawExclusions.map((e: string) => e.toLowerCase().trim());
 
     const isVegan = exclusionsLower.some((e) => e.includes('vegan'));
     const isVegetarian =
@@ -83,19 +88,6 @@ export async function POST(req: Request) {
       'poultry', 'shrimp', 'tuna', 'cod', 'seafood', 'bacon'
     ];
 
-    const dietaryFlags = [
-      'gluten-free', 'gluten free', 'dairy-free', 'dairy free',
-      'vegetarian', 'vegan', 'no meat', 'keto', 'low carb', 'low-carb',
-      'halal', 'kosher'
-    ];
-
-    const activeBannedTerms = Array.from(
-      new Set([
-        ...exclusionsLower.filter((term) => !dietaryFlags.some((flag) => term.includes(flag))),
-        ...(isVegetarian ? meatTerms : []),
-      ])
-    );
-
     const createScaledMeal = (
       baseMeal: any,
       targetCals: number,
@@ -111,7 +103,7 @@ export async function POST(req: Request) {
       const calorieRatio = cals / (baseMeal.calories || 600);
       const combinedMultiplier = calorieRatio * portionMultiplier;
 
-      const scaledIngredients = baseMeal.ingredients.map((ing: string) =>
+      const scaledIngredients = (baseMeal.ingredients || []).map((ing: string) =>
         scaleIngredientString(ing, combinedMultiplier)
       );
 
@@ -155,302 +147,79 @@ export async function POST(req: Request) {
       };
     };
 
-    // 2. RECIPE POOLS
-    const rawLunchPool = [
-      {
-        name: 'Lean Beef & Jasmine Rice Meal Prep Bowl',
-        calories: 650,
-        protein: 48,
-        carbs: 55,
-        fat: 16,
-        ingredients: [
-          '6oz 93/7 Lean Ground Beef',
-          '1 cup Cooked Jasmine Rice',
-          '1 cup Red & Yellow Bell Peppers (diced)',
-          '1 tsp Olive Oil',
-          '1/2 tsp Garlic Powder',
-          '1/2 tsp Onion Powder',
-          '1/4 tsp Salt & Black Pepper',
-        ],
-        instructions: [
-          'Heat olive oil in a skillet over medium-high heat.',
-          'Add ground beef, garlic powder, onion powder, salt, and pepper; brown for 6-8 minutes.',
-          'Add diced bell peppers and saute for 3-4 minutes until tender-crisp.',
-          'Divide rice into prep containers and top with beef mixture.',
-        ],
-        familyFriendlyNote: 'Serve veggies on the side if preferred by children.',
-        isPlantBased: false,
-        isVegan: false,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'Grilled Chicken & Quinoa Harvest Salad',
-        calories: 620,
-        protein: 52,
-        carbs: 50,
-        fat: 16,
-        ingredients: [
-          '6oz Boneless Skinless Chicken Breast',
-          '1 cup Cooked Quinoa',
-          '2 cups Mixed Greens',
-          '1 tbsp Extra Virgin Olive Oil',
-          '1 tbsp Apple Cider Vinegar',
-          '1/4 tsp Salt & Pepper',
-        ],
-        instructions: [
-          'Season chicken breast and grill on medium-high heat for 6-7 mins per side.',
-          'Whisk olive oil and apple cider vinegar for dressing.',
-          'Slice chicken and layer over greens and quinoa.',
-        ],
-        familyFriendlyNote: 'Keep dressing on the side for kids.',
-        isPlantBased: false,
-        isVegan: false,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'Keto Steak & Avocado Bowl',
-        calories: 680,
-        protein: 50,
-        carbs: 8,
-        fat: 48,
-        ingredients: [
-          '7oz Grilled Top Sirloin Steak',
-          '1 Whole Avocado (sliced)',
-          '2 cups Spinach & Wild Greens',
-          '2 tbsp Olive Oil Dressing',
-          '1/4 cup Shredded Cheddar',
-        ],
-        instructions: [
-          'Grill sirloin to preferred doneness and slice.',
-          'Serve over greens with sliced avocado and shredded cheddar.',
-          'Drizzle with olive oil dressing.',
-        ],
-        familyFriendlyNote: 'Keep cheese separate if needed.',
-        isPlantBased: false,
-        isVegan: false,
-        isGlutenFree: true,
-        isDairyFree: false,
-        isKeto: true,
-        isHalal: true,
-        isKosher: false,
-      },
-      {
-        name: 'Crispy Tofu & Quinoa Buddha Bowl',
-        calories: 600,
-        protein: 42,
-        carbs: 60,
-        fat: 18,
-        ingredients: [
-          '7oz Extra-Firm Tofu (cubed)',
-          '1 cup Cooked Quinoa',
-          '1/2 cup Edamame Beans',
-          '1 cup Shredded Purple Cabbage',
-          '1 tbsp Gluten-Free Tamari Dressing',
-        ],
-        instructions: [
-          'Press and cube tofu, season with tamari, and bake at 400°F for 20 mins until crisp.',
-          'Assemble bowl with quinoa, edamame, cabbage, and baked tofu.',
-          'Drizzle tamari dressing on top.',
-        ],
-        familyFriendlyNote: 'Serve dressing on the side for kids.',
-        isPlantBased: true,
-        isVegan: true,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'Chickpea & Lentil Power Salad with Lemon Tahini',
-        calories: 580,
-        protein: 38,
-        carbs: 65,
-        fat: 16,
-        ingredients: [
-          '1 cup Low-Sodium Chickpeas (rinsed)',
-          '1/2 cup Cooked Brown Lentils',
-          '2 cups Mixed Salad Greens',
-          '1/4 cup Diced Cucumbers',
-          '1.5 tbsp Lemon Tahini Dressing',
-        ],
-        instructions: [
-          'Combine chickpeas, lentils, greens, and diced cucumbers in a large bowl.',
-          'Whisk tahini, lemon juice, garlic, and water for dressing.',
-          'Toss salad with dressing right before serving.',
-        ],
-        familyFriendlyNote: 'Offer gluten-free crackers on the side for younger family members.',
-        isPlantBased: true,
-        isVegan: true,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-    ];
+    // 2. OPENAI DYNAMIC RECIPE POOL GENERATION
+    const systemPrompt = `You are a world-class executive chef and sports nutritionist.
+Generate dynamic, highly varied recipe options.
 
-    const rawDinnerPool = [
-      {
-        name: 'Gluten-Free Honey Garlic Chicken & Sweet Potato',
-        calories: 720,
-        protein: 55,
-        carbs: 65,
-        fat: 18,
-        ingredients: [
-          '7oz Boneless Skinless Chicken Breast',
-          '1.5 cups Diced Sweet Potatoes (roasted)',
-          '1 cup Steamed Broccoli Florets',
-          '1.5 tbsp Raw Honey',
-          '1 tbsp Gluten-Free Tamari',
-        ],
-        instructions: [
-          'Toss sweet potatoes in olive oil and roast at 400°F for 25 mins.',
-          'Sear seasoned chicken breast in a skillet until golden.',
-          'Pour honey and gluten-free tamari over chicken and simmer until glaze thickens.',
-          'Serve chicken with roasted sweet potatoes and steamed broccoli.',
-        ],
-        familyFriendlyNote: 'Deconstruct for children without extra glaze.',
-        isPlantBased: false,
-        isVegan: false,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'Sheet Pan Salmon with Sweet Potatoes & Asparagus',
-        calories: 700,
-        protein: 52,
-        carbs: 55,
-        fat: 22,
-        ingredients: [
-          '7oz Wild Salmon Fillet',
-          '1 cup Cubed Sweet Potatoes',
-          '10 Fresh Asparagus Spears',
-          '1.5 tbsp Olive Oil',
-          '1 tbsp Lemon Juice',
-          '1/2 tsp Garlic Salt & Black Pepper',
-        ],
-        instructions: [
-          'Roast sweet potato cubes at 400°F for 15 minutes first.',
-          'Add salmon and asparagus to the sheet pan.',
-          'Drizzle everything with olive oil, lemon juice, garlic salt, and pepper.',
-          'Bake for an additional 12-15 mins until salmon flakes and potatoes are tender.',
-        ],
-        familyFriendlyNote: 'Flake salmon for younger kids.',
-        isPlantBased: false,
-        isVegan: false,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'High-Protein Black Bean & Tempeh Bowl',
-        calories: 710,
-        protein: 46,
-        carbs: 70,
-        fat: 20,
-        ingredients: [
-          '6oz Sliced Tempeh',
-          '1 cup Black Beans',
-          '1 cup Cooked Brown Rice',
-          '1 cup Bell Peppers & Onions (sliced)',
-          '2 tbsp Guacamole',
-        ],
-        instructions: [
-          'Sear tempeh slices and fajita veggies in a hot skillet with taco seasoning for 6-8 mins.',
-          'Layer brown rice with black beans, tempeh, and veggies in a bowl.',
-          'Top with guacamole.',
-        ],
-        familyFriendlyNote: 'Assemble as DIY taco bowl night for kids.',
-        isPlantBased: true,
-        isVegan: true,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-      {
-        name: 'Pan-Seared Honey Tamari Tofu & Jasmine Rice',
-        calories: 690,
-        protein: 40,
-        carbs: 75,
-        fat: 16,
-        ingredients: [
-          '8oz Firm Tofu (cubed)',
-          '1.25 cups Cooked Jasmine Rice',
-          '1 cup Steamed Broccoli',
-          '1.5 tbsp Honey Tamari Glaze',
-          '1 tsp Sesame Oil',
-        ],
-        instructions: [
-          'Sear cubed tofu in sesame oil until golden on all sides.',
-          'Pour honey tamari glaze over tofu and simmer until thick.',
-          'Serve glazed tofu over jasmine rice with steamed broccoli.',
-        ],
-        familyFriendlyNote: 'Serve sauce on the side for kids.',
-        isPlantBased: true,
-        isVegan: true,
-        isGlutenFree: true,
-        isDairyFree: true,
-        isKeto: false,
-        isHalal: true,
-        isKosher: true,
-      },
-    ];
+CREATIVE DIVERSITY INSTRUCTIONS:
+- Draw from an expansive global library of recipes and cuisines (e.g., Mediterranean, Asian, Latin, Middle Eastern, American, European).
+- Avoid defaulting to standard generic meal-prep staples (like plain chicken and rice) unless explicitly requested.
+- Produce creative, distinct dish names and complete ingredients for every output.`;
 
-    // 3. DIETARY RULE CHECKING
-    const isMealAllowed = (meal: any) => {
-      if (isVegan && meal.isVegan === false) return false;
-      if (isGlutenFree && meal.isGlutenFree === false) return false;
-      if (isDairyFree && meal.isDairyFree === false) return false;
-      if (isKeto && meal.isKeto === false) return false;
-      if (isHalal && meal.isHalal === false) return false;
-      if (isKosher && meal.isKosher === false) return false;
-
-      if (activeBannedTerms.length === 0) return true;
-      const fullMealText = `${meal.name} ${meal.ingredients.join(' ')}`.toLowerCase();
-      return !activeBannedTerms.some((term) => fullMealText.includes(term.trim()));
-    };
-
-    let lunchPool = rawLunchPool.filter(isMealAllowed);
-    let dinnerPool = rawDinnerPool.filter(isMealAllowed);
-
-    if (!isVegetarian) {
-      const animalLunches = lunchPool.filter((m) => !m.isPlantBased);
-      if (animalLunches.length > 0) lunchPool = animalLunches;
-
-      const animalDinners = dinnerPool.filter((m) => !m.isPlantBased);
-      if (animalDinners.length > 0) dinnerPool = animalDinners;
+    const userPrompt = `Generate a pool of 6 Lunch recipes and 6 Dinner recipes for a client.
+Client Calories: ${clientCalories} kcal | Protein Target: ${clientProtein}g
+Dietary Restrictions / Exclusions to strictly follow: ${
+      exclusionsLower.length > 0 ? exclusionsLower.join(', ') : 'None'
     }
 
-    if (lunchPool.length === 0) lunchPool = rawLunchPool;
-    if (dinnerPool.length === 0) dinnerPool = rawDinnerPool;
+Return JSON with this exact shape:
+{
+  "lunchPool": [
+    {
+      "name": "Creative Dish Name",
+      "calories": 600,
+      "protein": 45,
+      "carbs": 50,
+      "fat": 15,
+      "ingredients": ["1 cup ingredient", "1 tbsp seasoning"],
+      "instructions": ["Step 1..."],
+      "familyFriendlyNote": "Optional note"
+    }
+  ],
+  "dinnerPool": [
+    {
+      "name": "Creative Dish Name",
+      "calories": 700,
+      "protein": 50,
+      "carbs": 60,
+      "fat": 18,
+      "ingredients": ["1 cup ingredient", "1 tbsp seasoning"],
+      "instructions": ["Step 1..."],
+      "familyFriendlyNote": "Optional note"
+    }
+  ]
+}`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.8,
+      response_format: { type: 'json_object' },
+    });
+
+    const parsedPools = JSON.parse(
+      completion.choices[0].message.content || '{"lunchPool":[], "dinnerPool":[]}'
+    );
+
+    const lunchPool = parsedPools.lunchPool || [];
+    const dinnerPool = parsedPools.dinnerPool || [];
 
     // SWAP HANDLER
     if (isSwapRequest && swapTarget) {
-      const pool =
-        swapTarget.type === 'Lunch'
-          ? lunchPool
-          : swapTarget.type === 'Dinner'
-          ? dinnerPool
-          : lunchPool;
-      const randomIndex = Math.floor(Math.random() * pool.length);
+      const pool = swapTarget.type === 'Lunch' ? lunchPool : dinnerPool;
+      const randomIndex = Math.floor(Math.random() * (pool.length || 1));
+      const baseMeal = pool[randomIndex] || {
+        name: 'Custom Macro Bowl',
+        calories: swapTarget.targetCalories || 650,
+        protein: swapTarget.targetProtein || 45,
+        ingredients: ['1 serving balanced ingredients'],
+      };
+
       const swappedMeal = createScaledMeal(
-        pool[randomIndex],
+        baseMeal,
         swapTarget.targetCalories || 700,
         swapTarget.targetProtein || 50,
         swapTarget.type,
@@ -484,13 +253,13 @@ export async function POST(req: Request) {
       generateSlots.forEach((type) => {
         let baseMeal;
         const rotateStep = effectiveBulkPrep ? (effectiveBatchSessions === 1 ? 7 : 3) : 1;
-        if (type === 'Lunch') {
+        if (type === 'Lunch' && lunchPool.length > 0) {
           const index =
             Number(varietyLevel) === 1
               ? 0
               : Math.floor(dayIndex / rotateStep) % lunchPool.length;
           baseMeal = lunchPool[index];
-        } else if (type === 'Dinner') {
+        } else if (type === 'Dinner' && dinnerPool.length > 0) {
           const index =
             Number(varietyLevel) === 1
               ? 0
@@ -587,13 +356,13 @@ export async function POST(req: Request) {
 
         let baseMeal;
         const rotateStep = effectiveBulkPrep ? (effectiveBatchSessions === 1 ? 7 : 3) : 1;
-        if (type === 'Lunch') {
+        if (type === 'Lunch' && lunchPool.length > 0) {
           const index =
             Number(varietyLevel) === 1
               ? 0
               : Math.floor(dayIndex / rotateStep) % lunchPool.length;
           baseMeal = lunchPool[index];
-        } else if (type === 'Dinner') {
+        } else if (type === 'Dinner' && dinnerPool.length > 0) {
           const index =
             Number(varietyLevel) === 1
               ? 0
@@ -622,12 +391,6 @@ export async function POST(req: Request) {
                 ],
             instructions: ['Combine ingredients in a bowl or wrap into tortilla and serve.'],
             familyFriendlyNote: 'Adjustable portion sizes.',
-            isVegan: isVegan,
-            isGlutenFree: true,
-            isDairyFree: true,
-            isKeto: false,
-            isHalal: true,
-            isKosher: true,
           };
         }
 
@@ -735,7 +498,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(mockData);
   } catch (error: unknown) {
-    console.error('Error generating plan:', error);
+    console.error('Error generating plan with OpenAI:', error);
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
