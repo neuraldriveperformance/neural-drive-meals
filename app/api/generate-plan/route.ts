@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// Ensure route is dynamic to prevent missing API key errors during Next.js static builds
+// Force Next.js to treat this route as dynamically rendered at request time
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    // Instantiate OpenAI lazily inside the POST handler
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'OPENAI_API_KEY is not configured in Vercel Environment Variables.' },
+        { status: 500 }
+      );
+    }
+
+    // Instantiate OpenAI dynamically inside the handler (safely reads from env)
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: apiKey.trim(),
     });
 
     const body = await req.json();
@@ -151,17 +160,31 @@ export async function POST(req: Request) {
       };
     };
 
+    // MAP BUDGET LEVELS TO EXPLICIT CULINARY DIRECTIVES
+    const budgetGuidelines: Record<string, string> = {
+      low: 'LOW BUDGET / ECONOMY: Prioritize highly affordable, cost-effective staples (e.g., canned beans, lentils, frozen veggies, eggs, oats, bulk rice, ground turkey, chicken thighs, canned tuna). Avoid expensive cuts of meat, fresh berries out of season, or specialty artisan products.',
+      moderate: 'MODERATE BUDGET / STANDARD: Balanced approach with accessible whole foods, standard lean proteins (e.g., chicken breast, 93/7 ground beef, tofu, salmon fillets), fresh seasonal produce, and everyday grains.',
+      high: 'HIGH BUDGET / PREMIUM: Gourmet/premium ingredients (e.g., ribeye steak, wild-caught salmon, organic produce, fresh berries, specialty cheeses, artisan grains, avocado, nuts, fresh herbs).',
+    };
+
+    const activeBudgetInstruction =
+      budgetGuidelines[String(budgetLevel).toLowerCase()] || budgetGuidelines.moderate;
+
     // 2. OPENAI DYNAMIC RECIPE POOL GENERATION
     const systemPrompt = `You are a world-class executive chef and sports nutritionist.
-Generate dynamic, highly varied recipe options.
+Generate dynamic, highly varied recipe options strictly tailored to the client's budget level.
 
 CREATIVE DIVERSITY INSTRUCTIONS:
 - Draw from an expansive global library of recipes and cuisines (e.g., Mediterranean, Asian, Latin, Middle Eastern, American, European).
 - Avoid defaulting to standard generic meal-prep staples (like plain chicken and rice) unless explicitly requested.
-- Produce creative, distinct dish names and complete ingredients for every output.`;
+- Produce creative, distinct dish names and complete ingredients for every output.
+
+BUDGET TIER DIRECTIVE:
+${activeBudgetInstruction}`;
 
     const userPrompt = `Generate a pool of 6 Lunch recipes and 6 Dinner recipes for a client.
 Client Calories: ${clientCalories} kcal | Protein Target: ${clientProtein}g
+Target Budget Level: ${String(budgetLevel).toUpperCase()}
 Dietary Restrictions / Exclusions to strictly follow: ${
       exclusionsLower.length > 0 ? exclusionsLower.join(', ') : 'None'
     }
