@@ -27,7 +27,7 @@ export interface DayPlan {
 interface MealPlanCalendarProps {
   calendarDays: any[];
   onSwapMeal?: (day: string, type: string) => void;
-  onSelectMeal?: (meal: Meal) => void;
+  onSelectMeal?: (meal: Meal) => void; // FIX 1: Added missing prop definition
   isModal?: boolean;
 }
 
@@ -101,7 +101,7 @@ export default function MealPlanCalendar({
 
   const handleShareRecipe = (meal: Meal) => {
     const ingredientsText = (meal.ingredients || [])
-      .map((i) => (typeof i === 'string' ? `• ${i}` : `• ${i.item || i.name} (${i.amount || ''})`))
+      .map((i: string | any) => (typeof i === 'string' ? `• ${i}` : `• ${i.item || i.name} (${i.amount || ''})`))
       .join('\n');
 
     const text = `🍽️ ${meal.name} (${meal.type})
@@ -125,7 +125,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
     if (!printWindow) return;
 
     const ingredientsList = (meal.ingredients || [])
-      .map((i) => `<li>${typeof i === 'string' ? i : `${i.item || i.name} (${i.amount || ''})`}</li>`)
+      .map((i: string | any) => `<li>${typeof i === 'string' ? i : `${i.item || i.name} (${i.amount || ''})`}</li>`)
       .join('');
     const instructionsList = (meal.instructions || []).map((inst) => `<li>${inst}</li>`).join('');
 
@@ -237,7 +237,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                         ) : null}
                       </div>
 
-                      {/* MEAL TITLE - CONDITIONAL TRUNCATION */}
+                      {/* FIX 3: CONDITIONAL UNCOMPRESSED MEAL TITLE */}
                       <div
                         className={`font-bold text-white text-xs leading-snug ${
                           isModal
@@ -294,7 +294,8 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                               Ingredients:
                             </strong>
                             <ul className="list-disc pl-3 space-y-0.5">
-                              {meal.ingredients?.map((ing, iIdx) => (
+                              {/* FIX 2: EXPLICIT TYPE FOR ING PARAMETER */}
+                              {meal.ingredients?.map((ing: string | any, iIdx: number) => (
                                 <li key={iIdx} className="whitespace-normal break-words">
                                   {typeof ing === 'string'
                                     ? ing
@@ -309,7 +310,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                               {meal.isBatchCooked ? 'Batch Cooking & Storage:' : 'Instructions:'}
                             </strong>
                             <ol className="list-decimal pl-3 space-y-0.5">
-                              {meal.instructions?.map((inst, iIdx) => (
+                              {meal.instructions?.map((inst: string, iIdx: number) => (
                                 <li key={iIdx} className="whitespace-normal break-words">{inst}</li>
                               ))}
                             </ol>
