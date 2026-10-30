@@ -203,53 +203,36 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                       onClick={() => onSelectMeal && onSelectMeal(meal)}
                       className="bg-[#162032] border border-[#1E2D4A] hover:border-[#00F2FE]/60 rounded-xl p-2.5 space-y-2 text-xs transition cursor-pointer"
                     >
+                      {/* CARD HEADER */}
                       <div className="flex justify-between items-center gap-1">
-                        <span className="font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A]">
+                        <span className="font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A] truncate">
                           {meal.type}
                         </span>
 
-                        <div className="flex items-center gap-1.5">
-                          {/* HIGH VISIBILITY BOOKMARK BUTTON */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleToggleBookmark(e, meal)}
-                            disabled={isSaving}
-                            title={isBookmarked ? 'Remove from Saved Recipes' : 'Save to Recipe Library'}
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md border transition flex items-center gap-1 ${
-                              isBookmarked
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
-                                : 'bg-[#0F1724] text-gray-400 border-[#1E2D4A] hover:text-white hover:border-gray-500'
-                            }`}
-                          >
-                            <span>{isSaving ? '⏳' : isBookmarked ? '🔖' : '🔖'}</span>
-                            <span>{isSaving ? '...' : isBookmarked ? 'Saved' : 'Bookmark'}</span>
-                          </button>
-
-                          {meal.prepTime && (
-                            <span className="text-[9px] text-gray-400 font-mono">
-                              ⏱️ {meal.prepTime}
-                            </span>
-                          )}
-                        </div>
+                        {meal.prepTime && (
+                          <span className="text-[9px] text-gray-400 font-mono">
+                            ⏱️ {meal.prepTime}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="font-bold text-white text-xs leading-snug">
+                      <div className="font-bold text-white text-xs leading-snug line-clamp-2">
                         {meal.name}
                       </div>
 
                       {/* FULL MACROS */}
-                      <div className="grid grid-cols-4 gap-1 text-[9px] font-mono pt-0.5 text-center">
-                        <span className="bg-[#0F1724] py-0.5 rounded text-amber-400 font-bold border border-[#1E2D4A]">
+                      <div className="grid grid-cols-4 gap-0.5 text-[9px] font-mono pt-0.5 text-center">
+                        <span className="bg-[#0F1724] py-0.5 rounded text-amber-400 font-bold border border-[#1E2D4A] truncate">
                           {meal.calories}k
                         </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-emerald-400 font-bold border border-[#1E2D4A]">
-                          {meal.protein}g P
+                        <span className="bg-[#0F1724] py-0.5 rounded text-emerald-400 font-bold border border-[#1E2D4A] truncate">
+                          {meal.protein}g
                         </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-cyan-400 border border-[#1E2D4A]">
-                          {meal.carbs ?? 0}g C
+                        <span className="bg-[#0F1724] py-0.5 rounded text-cyan-400 border border-[#1E2D4A] truncate">
+                          {meal.carbs ?? 0}g
                         </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-rose-400 border border-[#1E2D4A]">
-                          {meal.fat ?? 0}g F
+                        <span className="bg-[#0F1724] py-0.5 rounded text-rose-400 border border-[#1E2D4A] truncate">
+                          {meal.fat ?? 0}g
                         </span>
                       </div>
 
@@ -298,25 +281,26 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                             <button
                               type="button"
                               onClick={(e) => handleToggleBookmark(e, meal)}
-                              className={`py-1 rounded text-[9px] font-bold uppercase transition text-center border ${
+                              disabled={isSaving}
+                              className={`py-1 rounded text-[8px] font-bold uppercase transition text-center border ${
                                 isBookmarked
                                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
                                   : 'bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border-[#1E2D4A]'
                               }`}
                             >
-                              {isBookmarked ? '🔖 Saved' : '🔖 Save'}
+                              {isSaving ? '⏳...' : isBookmarked ? '🔖 Saved' : '🔖 Save'}
                             </button>
                             <button
                               type="button"
                               onClick={() => handlePrintRecipe(meal)}
-                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
+                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center"
                             >
                               🖨️ Print
                             </button>
                             <button
                               type="button"
                               onClick={() => handleShareRecipe(meal)}
-                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
+                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center"
                             >
                               📤 Share
                             </button>
@@ -325,7 +309,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                                 type="button"
                                 onClick={() => handleSwapClick(dayPlan.day, meal.type, mealId)}
                                 disabled={isSwapping}
-                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-cyan-400 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center ${
+                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-cyan-400 border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center ${
                                   isSwapping ? 'opacity-50 cursor-not-allowed' : ''
                                 }`}
                               >
