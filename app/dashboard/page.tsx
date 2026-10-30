@@ -32,10 +32,6 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
       setLoading(true);
       try {
-        useEffect(() => {
-    async function fetchDashboardData() {
-      setLoading(true);
-      try {
         const { data: plansData } = await supabase
           .from('saved_plans')
           .select('*')
@@ -61,6 +57,10 @@ export default function DashboardPage() {
 
     fetchDashboardData();
   }, []);
+
+  const toggleAccordion = (planId: string) => {
+    setOpenAccordions((prev) => ({ ...prev, [planId]: !prev[planId] }));
+  };
 
   const handleStartRename = (planId: string, currentTitle: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -235,7 +235,6 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      {/* FULL UNCOMPRESSED WEEKLY CALENDAR OVERVIEW */}
                       {calendar.length > 0 && (
                         <div className="mt-4 bg-slate-950/80 border border-slate-800 rounded-xl p-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -270,7 +269,6 @@ export default function DashboardPage() {
                                             ) : null}
                                           </div>
 
-                                          {/* FULL UNCOMPRESSED MEAL TITLE */}
                                           <div className="text-xs font-semibold text-slate-100 leading-snug whitespace-normal break-words">
                                             {meal.name || meal.title || 'Meal'}
                                           </div>
