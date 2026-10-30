@@ -4,41 +4,75 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
 import ProfileModal from '../Components/ProfileModal';
+import { getSavedRecipes, unsaveRecipe, SavedRecipe } from '@/lib/recipes';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'plans' | 'recipes'>('plans');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
+  const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
+  const [selectedRecipe, setSelectedRecipe] = useState<SavedRecipe | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    async function fetchSavedPlans() {
+    async function fetchDashboardData() {
+      setLoading(true);
       try {
         const supabase = createBrowserClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
 
-        const { data, error } = await supabase
+        // 1. Fetch Saved Meal Plans
+        const { data: plansData, error: plansError } = await supabase
           .from('saved_plans')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!error && data) {
-          setSavedPlans(data);
+        if (!plansError && plansData) {
+          setSavedPlans(plansData);
         }
+
+        // 2. Fetch Bookmarked Recipes
+        const recipesData = await getSavedRecipes();
+        setSavedRecipes(recipesData);
       } catch (err) {
-        console.error('Error fetching plans:', err);
-      } finally {
+        console.error('Error fetching dashboard data:', err);
+      } font-medium {
         setLoading(false);
       }
     }
 
-    fetchSavedPlans();
+    fetchDashboardData();
   }, []);
 
+  const handleDeletePlan = async (planId: string) => {
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      const { error } = await supabase.from('saved_plans').delete().eq('id', planId);
+      if (!error) {
+        setSavedPlans((prev) => prev.filter((p) => p.id !== planId));
+      }
+    } catch (err) {
+      console.error('Error deleting plan:', err);
+    }
+  };
+
+  const handleDeleteRecipe = async (recipeName: string) => {
+    const success = await unsaveRecipe(recipeName);
+    if (success) {
+      setSavedRecipes((prev) => prev.filter((r) => r.recipe_name !== recipeName));
+      if (selectedRecipe?.recipe_name === recipeName) {
+        setSelectedRecipe(null);
+      }
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Navigation Header */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-6">
@@ -77,8 +111,8 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Body */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-6">
-        <div className="flex items-center justify-between mb-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto p-6 space-y-8">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Your Saved Library</h1>
             <p className="text-slate-400 text-sm mt-1">
@@ -103,7 +137,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-slate-800 mb-6">
+        <div className="flex border-b border-slate-800">
           <button
             onClick={() => setActiveTab('plans')}
             className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
@@ -112,7 +146,7 @@ export default function DashboardPage() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Saved Meal Plans
+            Saved Meal Plans ({savedPlans.length})
           </button>
           <button
             onClick={() => setActiveTab('recipes')}
@@ -122,17 +156,18 @@ export default function DashboardPage() {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Saved Recipes
+            Saved Recipes ({savedRecipes.length})
           </button>
         </div>
 
         {/* Content Area */}
-        {activeTab === 'plans' ? (
-          loading ? (
-            <div className="p-8 text-center text-slate-400 text-sm">
-              Loading your saved library...
-            </div>
-          ) : savedPlans.length > 0 ? (
+        {loading ? (
+          <div className="p-12 text-center text-slate-400 text-sm">
+            Loading your saved library...
+          </div>
+        ) : activeTab === 'plans' ? (
+          /* SAVED PLANS TAB */
+          savedPlans.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {savedPlans.map((plan) => (
                 <div
@@ -149,52 +184,76 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <p className="text-slate-400 text-xs mb-4">
-                      {plan.plan_data?.length || 7}-Day Custom Performance Protocol
+                      {plan.plan_data?.calendar?.length || 7}-Day Custom Performance Protocol
                     </p>
                   </div>
 
-                  <Link
-                    href="/"
-                    className="mt-2 text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center gap-1"
-                  >
-                    View Plan Details →
-                  </Link>
+                  <div className="flex justify-between items-center border-t border-slate-800 pt-3 mt-2">
+                    <Link
+                      href="/"
+                      className="text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-1"
+                    >
+                      View Plan Details →
+                    </Link>
+                    <button
+                      onClick={() => handleDeletePlan(plan.id)}
+                      className="text-xs text-rose-400 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 col-span-full">
-                <p className="text-slate-400 text-sm">No saved meal plans yet.</p>
-                <Link
-                  href="/"
-                  className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
-                >
-                  Generate a plan to save it here →
-                </Link>
-              </div>
-            </div>
-          )
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 col-span-full">
-              <p className="text-slate-400 text-sm">No saved recipes yet.</p>
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
+              <p className="text-slate-400 text-sm">No saved meal plans yet.</p>
               <Link
                 href="/"
                 className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
               >
-                Find and bookmark recipes →
+                Generate a plan to save it here →
               </Link>
             </div>
-          </div>
-        )}
-      </main>
+          )
+        ) : (
+          /* SAVED RECIPES TAB */
+          savedRecipes.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {savedRecipes.map((recipe) => (
+                <div
+                  key={recipe.id || recipe.recipe_name}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-3"
+                >
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                        {recipe.meal_type || 'Recipe'}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteRecipe(recipe.recipe_name)}
+                        className="text-xs text-slate-500 hover:text-rose-400 transition-colors"
+                        title="Remove bookmark"
+                      >
+                        ✕
+                      </button>
+                    </div>
 
-      {/* Household & Nutrition Profile Modal */}
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-      />
-    </div>
-  );
-}
+                    <h3 className="font-semibold text-white text-sm leading-snug">
+                      {recipe.recipe_name}
+                    </h3>
+
+                    <div className="flex items-center gap-3 text-xs text-slate-400">
+                      {recipe.calories ? <span>{recipe.calories} kcal</span> : null}
+                      {recipe.protein ? (
+                        <span className="text-cyan-400 font-medium">{recipe.protein}g protein</span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedRecipe(recipe)}
+                    className="w-full mt-2 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-400 rounded-lg transition-colors"
+                  >
+                    View Full Details
+                  </button>

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getSavedRecipes, saveRecipe, unsaveRecipe } from '@/lib/recipes';
 
 export interface Meal {
   type: string;
@@ -41,6 +42,17 @@ export default function MealPlanCalendar({
 }: MealPlanCalendarProps) {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [swappingMealId, setSwappingMealId] = useState<string | null>(null);
+  const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
+
+  // Load existing bookmarked recipe names on mount
+  useEffect(() => {
+    async function loadBookmarks() {
+      const recipes = await getSavedRecipes();
+      const names = new Set(recipes.map((r) => r.recipe_name));
+      setSavedNames(names);
+    }
+    loadBookmarks();
+  }, []);
 
   if (!calendarDays || calendarDays.length === 0) {
     return (
@@ -54,20 +66,37 @@ export default function MealPlanCalendar({
     setExpandedMeal(expandedMeal === mealId ? null : mealId);
   };
 
+  const handleToggleBookmark = async (e: React.MouseEvent, meal: Meal) => {
+    e.stopPropagation();
+    const isBookmarked = savedNames.has(meal.name);
+
+    if (isBookmarked) {
+      const success = await unsaveRecipe(meal.name);
+      if (success) {
+        setSavedNames((prev) => {
+          const next = new Set(prev);
+          next.delete(meal.name);
+          return next;
+        });
+      }
+    } else {
+      const saved = await saveRecipe(meal);
+      if (saved) {
+        setSavedNames((prev) => new Set(prev).add(meal.name));
+      }
+    }
+  };
+
   const handleShareRecipe = (meal: Meal) => {
     const text = `🍽️ ${meal.name} (${meal.type})
-Macros: ${meal.calories} kcal | ${meal.protein}g P | ${meal.carbs}g C | ${meal.fat}g F
+Macros: ${meal.calories} kcal \vert{}${meal.protein}g P | ${meal.carbs}g C \vert{}${meal.fat}g F
 Prep Time: ${meal.prepTime || 'N/A'}
 
 Ingredients:
 ${meal.ingredients.map((i) => `• ${i}`).join('\n')}
 
 Instructions:
-${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
-
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      alert(`Copied "${meal.name}" recipe to clipboard!`);
+${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;  if (navigator.clipboard) { navigator.clipboard.writeText(text); alert(`Copied "${meal.name}" recipe to clipboard!`);
     }
   };
 
@@ -91,183 +120,11 @@ ${meal.instructions.map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')}`;
           <span class="badge">${meal.type.toUpperCase()}</span>
           <h1>${meal.name}</h1>
           <div class="macros">
-            ${meal.calories} kcal | ${meal.protein}g Protein | ${meal.carbs}g Carbs | ${meal.fat}g Fat
+            ${meal.calories} kcal \vert{}${meal.protein}g Protein | ${meal.carbs}g Carbs \vert{}${meal.fat}g Fat
           </div>
           <p><strong>Prep Time:</strong> ${meal.prepTime || 'N/A'}</p>
           <hr />
           <h3>Ingredients</h3>
           <ul>${meal.ingredients.map((i) => `<li>${i}</li>`).join('')}</ul>
           <h3>Instructions</h3>
-          <ol>${meal.instructions.map((inst) => `<li>${inst}</li>`).join('')}</ol>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
-  };
-
-  const handleSwapClick = async (day: string, type: string, mealId: string) => {
-    if (!onSwapMeal) return;
-    setSwappingMealId(mealId);
-    try {
-      await onSwapMeal(day, type);
-    } finally {
-      setSwappingMealId(null);
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-      {calendarDays.map((dayPlan, dIdx) => {
-        const sortedMeals = [...(dayPlan.meals || [])].sort((a, b) => {
-          const orderA = MEAL_ORDER[a.type] || 99;
-          const orderB = MEAL_ORDER[b.type] || 99;
-          return orderA - orderB;
-        });
-
-        return (
-          <div
-            key={dIdx}
-            className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-3 flex flex-col space-y-3 min-w-0"
-          >
-            {/* DAY HEADER */}
-            <div className="border-b border-[#1E2D4A] pb-2 text-center">
-              <h3 className="text-sm font-black text-[#00F2FE] tracking-wider uppercase">
-                {dayPlan.day}
-              </h3>
-              <div className="text-[10px] text-gray-400 uppercase font-mono">
-                {sortedMeals.length} Scheduled
-              </div>
-            </div>
-
-            {/* MEALS LIST */}
-            <div className="space-y-2.5 flex-1">
-              {sortedMeals.length === 0 ? (
-                <div className="text-[11px] text-gray-500 text-center py-4 italic">
-                  Rest / Fasting Day
-                </div>
-              ) : (
-                sortedMeals.map((meal, mIdx) => {
-                  const mealId = `${dayPlan.day}-${meal.type}-${mIdx}`;
-                  const isExpanded = expandedMeal === mealId;
-                  const isSwapping = swappingMealId === mealId;
-
-                  return (
-                    <div
-                      key={mIdx}
-                      onClick={() => onSelectMeal && onSelectMeal(meal)}
-                      className="bg-[#162032] border border-[#1E2D4A] hover:border-[#00F2FE]/60 rounded-xl p-2.5 space-y-2 text-xs transition cursor-pointer"
-                    >
-                      <div className="flex justify-between items-center gap-1">
-                        <span className="font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A]">
-                          {meal.type}
-                        </span>
-                        {meal.prepTime && (
-                          <span className="text-[9px] text-gray-400 font-mono">
-                            ⏱️ {meal.prepTime}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="font-bold text-white text-xs leading-snug">
-                        {meal.name}
-                      </div>
-
-                      {/* FULL MACROS */}
-                      <div className="grid grid-cols-4 gap-1 text-[9px] font-mono pt-0.5 text-center">
-                        <span className="bg-[#0F1724] py-0.5 rounded text-amber-400 font-bold border border-[#1E2D4A]">
-                          {meal.calories}k
-                        </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-emerald-400 font-bold border border-[#1E2D4A]">
-                          {meal.protein}g P
-                        </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-cyan-400 border border-[#1E2D4A]">
-                          {meal.carbs ?? 0}g C
-                        </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-rose-400 border border-[#1E2D4A]">
-                          {meal.fat ?? 0}g F
-                        </span>
-                      </div>
-
-                      {/* TOGGLE RECIPE DROPDOWN */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleExpand(mealId);
-                        }}
-                        className="w-full mt-1 text-[9px] font-extrabold uppercase bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] py-1 rounded border border-[#1E2D4A] transition"
-                      >
-                        {isExpanded ? 'Hide ▲' : 'Recipe ▼'}
-                      </button>
-
-                      {/* RECIPE DETAILS & ACTION BUTTON MATRIX */}
-                      {isExpanded && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]"
-                        >
-                          <div>
-                            <strong className="text-[#00F2FE] block mb-0.5">
-                              Ingredients:
-                            </strong>
-                            <ul className="list-disc pl-3 space-y-0.5">
-                              {meal.ingredients?.map((ing, iIdx) => (
-                                <li key={iIdx}>{ing}</li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          <div>
-                            <strong className="text-[#00F2FE] block mb-0.5">
-                              Instructions:
-                            </strong>
-                            <ol className="list-decimal pl-3 space-y-0.5">
-                              {meal.instructions?.map((inst, iIdx) => (
-                                <li key={iIdx}>{inst}</li>
-                              ))}
-                            </ol>
-                          </div>
-
-                          {/* ACTION BUTTON MATRIX */}
-                          <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[#1E2D4A]/50">
-                            <button
-                              type="button"
-                              onClick={() => handlePrintRecipe(meal)}
-                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
-                            >
-                              🖨️ Print
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleShareRecipe(meal)}
-                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center"
-                            >
-                              📤 Share
-                            </button>
-                            {onSwapMeal && (
-                              <button
-                                type="button"
-                                onClick={() => handleSwapClick(dayPlan.day, meal.type, mealId)}
-                                disabled={isSwapping}
-                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center ${
-                                  isSwapping ? 'opacity-50 cursor-not-allowed' : ''
-                                }`}
-                              >
-                                {isSwapping ? '⏳...' : '🔄 Swap'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+          <ol>${meal.instructions.map((inst) =>
