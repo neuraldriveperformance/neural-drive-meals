@@ -118,6 +118,18 @@ export default function Home() {
     loadProfileDefaults();
   }, []);
 
+  // --- VARIETY & BULK PREP DEPENDENCY SYNC ---
+  const handleVarietyChange = (newVariety: number) => {
+    setVariety(newVariety);
+    if (newVariety === 5) {
+      // Rule 1: Max variety disables bulk prep
+      setBulkPrep(false);
+    } else if (newVariety < 3) {
+      // Rule 3: Variety < 3 forces batch sessions to 1
+      setBatchSessions(1);
+    }
+  };
+
   const addClientExclusion = () => {
     const val = exclusionInput.trim();
     if (val && !clientExclusions.includes(val)) {
@@ -239,6 +251,9 @@ export default function Home() {
     setLoading(true);
 
     try {
+      const activeBulkPrep = variety === 5 ? false : bulkPrep;
+      const activeBatchSessions = variety < 3 ? 1 : batchSessions;
+
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -252,8 +267,8 @@ export default function Home() {
           budgetLevel: budget,
           weeklySchedule: schedule,
           varietyLevel: variety,
-          enableBulkPrep: bulkPrep,
-          batchSessions: bulkPrep ? batchSessions : 1,
+          enableBulkPrep: activeBulkPrep,
+          batchSessions: activeBulkPrep ? activeBatchSessions : 1,
           maxPrepTime,
           recipeHistory,
           seed: `${Date.now()}-${Math.random()}`,
@@ -308,6 +323,9 @@ export default function Home() {
 
       const combinedExclusions = Array.from(new Set([...recipeHistory, ...currentCalendarMeals]));
 
+      const activeBulkPrep = variety === 5 ? false : bulkPrep;
+      const activeBatchSessions = variety < 3 ? 1 : batchSessions;
+
       const response = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -321,8 +339,8 @@ export default function Home() {
           budgetLevel: budget,
           weeklySchedule: schedule,
           varietyLevel: variety,
-          enableBulkPrep: bulkPrep,
-          batchSessions: bulkPrep ? batchSessions : 1,
+          enableBulkPrep: activeBulkPrep,
+          batchSessions: activeBulkPrep ? activeBatchSessions : 1,
           maxPrepTime,
           recipeHistory: combinedExclusions,
           seed: `${Date.now()}-${Math.random()}`,
@@ -667,7 +685,7 @@ export default function Home() {
                   min="1"
                   max="5"
                   value={variety}
-                  onChange={(e) => setVariety(Number(e.target.value))}
+                  onChange={(e) => handleVarietyChange(Number(e.target.value))}
                   className="w-full accent-[#00F2FE] bg-[#0F1724] rounded-lg h-2 cursor-pointer"
                 />
               </div>
@@ -675,21 +693,36 @@ export default function Home() {
               <div className="bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-white">Enable Batch Cooking Strategy</div>
-                    <div className="text-[10px] text-gray-400">Reuses cooked proteins/grains across consecutive slots</div>
+                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                      <span>Enable Batch Cooking Strategy</span>
+                      {variety === 5 && (
+                        <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded border border-rose-500/30">
+                          Disabled on Max Variety
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-gray-400">
+                      Reuses cooked proteins/grains across consecutive slots
+                    </div>
                   </div>
+
                   <button
                     type="button"
+                    disabled={variety === 5}
                     onClick={() => setBulkPrep(!bulkPrep)}
                     className={`px-4 py-1.5 rounded-lg font-black text-xs transition ${
-                      bulkPrep ? 'bg-[#00F2FE] text-black' : 'bg-[#1E2D4A] text-gray-400'
+                      variety === 5
+                        ? 'bg-[#162032] text-gray-600 border border-[#1E2D4A] cursor-not-allowed'
+                        : bulkPrep
+                        ? 'bg-[#00F2FE] text-black'
+                        : 'bg-[#1E2D4A] text-gray-400'
                     }`}
                   >
-                    {bulkPrep ? 'ENABLED' : 'DISABLED'}
+                    {variety === 5 ? 'LOCKED' : bulkPrep ? 'ENABLED' : 'DISABLED'}
                   </button>
                 </div>
 
-                {bulkPrep && (
+                {bulkPrep && variety < 5 && (
                   <div className="pt-2 border-t border-[#1E2D4A] flex items-center justify-between">
                     <span className="text-[10px] font-bold text-gray-400 uppercase">Prep Frequency:</span>
                     <div className="flex gap-2">
@@ -706,14 +739,17 @@ export default function Home() {
                       </button>
                       <button
                         type="button"
+                        disabled={variety < 3}
                         onClick={() => setBatchSessions(2)}
                         className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
-                          batchSessions === 2
+                          variety < 3
+                            ? 'bg-[#162032] text-gray-600 border border-[#1E2D4A] cursor-not-allowed'
+                            : batchSessions === 2
                             ? 'bg-[#00F2FE]/20 text-[#00F2FE] border border-[#00F2FE]'
                             : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
                         }`}
                       >
-                        2 Sessions (Sun / Wed Split)
+                        2 Sessions {variety < 3 ? '(Requires Variety 3+)' : '(Sun / Wed Split)'}
                       </button>
                     </div>
                   </div>

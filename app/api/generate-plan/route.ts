@@ -22,6 +22,12 @@ export async function POST(req: Request) {
       swapTarget,
     } = body;
 
+    // RULE ENFORCEMENT ON BACKEND:
+    // If Max Variety (5), force bulk prep OFF.
+    // If Variety < 3, force batch sessions to 1.
+    const effectiveBulkPrep = varietyLevel === 5 ? false : enableBulkPrep;
+    const effectiveBatchSessions = varietyLevel < 3 ? 1 : batchSessions;
+
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
     const BASE_SLOT_WEIGHTS: Record<string, number> = {
@@ -58,7 +64,6 @@ export async function POST(req: Request) {
 
     const exclusionsLower = rawExclusions.map((e) => e.toLowerCase().trim());
 
-    // Extract designated global dietary restrictions
     const isVegan = exclusionsLower.some((e) => e.includes('vegan'));
     const isVegetarian =
       isVegan ||
@@ -124,7 +129,7 @@ export async function POST(req: Request) {
       let batchYieldText = '1 Single Portion';
       if (bulkPrepActive) {
         batchYieldText =
-          batchSessions === 1
+          effectiveBatchSessions === 1
             ? `1 Power Prep Session • Yields ${occurrencesCount} Servings`
             : `2 Session Split • Yields ${occurrencesCount} Servings`;
       }
@@ -142,13 +147,15 @@ export async function POST(req: Request) {
         batchYield: batchYieldText,
         bulkPrepNote: bulkPrepActive
           ? `Note: Quantities reflect the ${
-              batchSessions === 1 ? 'weekly power prep session' : '2 mid-week prep sessions'
+              effectiveBatchSessions === 1
+                ? 'weekly power prep session'
+                : '2 mid-week prep sessions'
             }.`
           : null,
       };
     };
 
-    // 2. RECIPE POOLS WITH DIETARY FLAGS & GF COMPATIBILITY
+    // 2. RECIPE POOLS
     const rawLunchPool = [
       {
         name: 'Lean Beef & Jasmine Rice Meal Prep Bowl',
@@ -433,7 +440,7 @@ export async function POST(req: Request) {
     if (lunchPool.length === 0) lunchPool = rawLunchPool;
     if (dinnerPool.length === 0) dinnerPool = rawDinnerPool;
 
-    // --- SWAP REQUEST HANDLER ---
+    // SWAP HANDLER
     if (isSwapRequest && swapTarget) {
       const pool =
         swapTarget.type === 'Lunch'
@@ -448,7 +455,7 @@ export async function POST(req: Request) {
         swapTarget.targetProtein || 50,
         swapTarget.type,
         totalPortionWeight,
-        enableBulkPrep,
+        effectiveBulkPrep,
         1
       );
 
@@ -457,7 +464,7 @@ export async function POST(req: Request) {
 
     const isScheduleCompletelyEmpty = Object.keys(weeklySchedule).length === 0;
 
-    // PRE-PASS: COUNT OCCURRENCES OF EACH MEAL ACROSS THE WEEK
+    // PRE-PASS: COUNT OCCURRENCES OF EACH MEAL
     const mealOccurrences: Record<string, number> = {};
 
     days.forEach((day, dayIndex) => {
@@ -476,7 +483,7 @@ export async function POST(req: Request) {
 
       generateSlots.forEach((type) => {
         let baseMeal;
-        const rotateStep = enableBulkPrep ? (batchSessions === 1 ? 7 : 3) : 1;
+        const rotateStep = effectiveBulkPrep ? (effectiveBatchSessions === 1 ? 7 : 3) : 1;
         if (type === 'Lunch') {
           const index =
             Number(varietyLevel) === 1
@@ -498,7 +505,7 @@ export async function POST(req: Request) {
 
     const ingredientAggregator: Record<string, number> = {};
 
-    // --- FULL PLAN GENERATION HANDLER ---
+    // FULL PLAN GENERATION HANDLER
     const mockWeeklyCalendar = days.map((day, dayIndex) => {
       const daySchedule = weeklySchedule[day] || {};
 
@@ -579,7 +586,7 @@ export async function POST(req: Request) {
         const targetProt = Math.round(remainingProtein * ratio);
 
         let baseMeal;
-        const rotateStep = enableBulkPrep ? (batchSessions === 1 ? 7 : 3) : 1;
+        const rotateStep = effectiveBulkPrep ? (effectiveBatchSessions === 1 ? 7 : 3) : 1;
         if (type === 'Lunch') {
           const index =
             Number(varietyLevel) === 1
@@ -625,7 +632,7 @@ export async function POST(req: Request) {
         }
 
         const occurrences = mealOccurrences[baseMeal.name] || 1;
-        const cardMultiplier = enableBulkPrep
+        const cardMultiplier = effectiveBulkPrep
           ? occurrences * totalPortionWeight
           : totalPortionWeight;
 
@@ -635,11 +642,11 @@ export async function POST(req: Request) {
           targetProt,
           type,
           cardMultiplier,
-          enableBulkPrep,
+          effectiveBulkPrep,
           occurrences
         );
 
-        if (enableBulkPrep) {
+        if (effectiveBulkPrep) {
           if (!mealOccurrences[`added_${baseMeal.name}`]) {
             scaledMeal.ingredients.forEach((ing: string) => {
               ingredientAggregator[ing] = 1;
@@ -659,7 +666,7 @@ export async function POST(req: Request) {
       return { day, meals: allMeals };
     });
 
-    // 5. GROCERY CONSOLIDATION & CATEGORIZATION
+    // 5. GROCERY CONSOLIDATION
     const categorizeIngredient = (ingredient: string) => {
       const lower = ingredient.toLowerCase();
       if (
@@ -714,7 +721,7 @@ export async function POST(req: Request) {
       ([category, itemsMap]) =>
         Array.from(itemsMap.entries()).map(([item, count]) => ({
           category,
-          item: enableBulkPrep ? item : scaleIngredientString(item, count),
+          item: effectiveBulkPrep ? item : scaleIngredientString(item, count),
         }))
     );
 
