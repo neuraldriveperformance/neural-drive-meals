@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
 import ProfileModal from '../Components/ProfileModal';
 import GroceryChecklist from '../Components/GroceryChecklist';
+import MealPlanCalendar from '../Components/MealPlanCalendar';
 import { getSavedRecipes, unsaveRecipe, SavedRecipe } from '@/lib/recipes';
-import { getAllUserChecklists, deleteGroceryChecklist } from '@/lib/grocery';
+import { getAllUserChecklists, deleteGroceryChecklist, updateChecklistTitle } from '@/lib/grocery';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'plans' | 'groceries' | 'recipes'>('plans');
@@ -14,19 +15,23 @@ export default function DashboardPage() {
   const [checklists, setChecklists] = useState<any[]>([]);
   const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<SavedRecipe | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+
+  const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>({});
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [tempTitle, setTempTitle] = useState<string>('');
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   useEffect(() => {
     async function fetchDashboardData() {
       setLoading(true);
       try {
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-
-        // 1. Fetch Saved Meal Plans
         const { data: plansData } = await supabase
           .from('saved_plans')
           .select('*')
@@ -34,11 +39,13 @@ export default function DashboardPage() {
 
         if (plansData) setSavedPlans(plansData);
 
-        // 2. Fetch Active Grocery Checklists
         const userLists = await getAllUserChecklists();
         setChecklists(userLists);
 
-        // 3. Fetch Bookmarked Recipes
+        if (userLists.length > 0) {
+          setOpenAccordions({ [userLists[0].plan_id]: true });
+        }
+
         const recipesData = await getSavedRecipes();
         setSavedRecipes(recipesData);
       } catch (err) {
@@ -51,15 +58,36 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, []);
 
+  const toggleAccordion = (planId: string) => {
+    setOpenAccordions((prev) => ({ ...prev, [planId]: !prev[planId] }));
+  };
+
+  const handleStartRename = (planId: string, currentTitle: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingTitleId(planId);
+    setTempTitle(currentTitle);
+  };
+
+  const handleSaveTitle = async (planId: string, e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (!tempTitle.trim()) return;
+
+    const success = await updateChecklistTitle(planId, tempTitle.trim());
+    if (success) {
+      setChecklists((prev) =>
+        prev.map((c) => (c.plan_id === planId ? { ...c, plan_title: tempTitle.trim() } : c))
+      );
+    }
+    setEditingTitleId(null);
+  };
+
   const handleDeletePlan = async (planId: string) => {
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
       const { error } = await supabase.from('saved_plans').delete().eq('id', planId);
       if (!error) {
         setSavedPlans((prev) => prev.filter((p) => p.id !== planId));
+        await deleteGroceryChecklist(planId);
+        setChecklists((prev) => prev.filter((c) => c.plan_id !== planId));
       }
     } catch (err) {
       console.error('Error deleting plan:', err);
@@ -85,7 +113,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <span className="font-bold text-xl text-cyan-400 tracking-tight">
@@ -109,10 +136,6 @@ export default function DashboardPage() {
 
         <button
           onClick={async () => {
-            const supabase = createBrowserClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-            );
             await supabase.auth.signOut();
             window.location.href = '/login';
           }}
@@ -122,7 +145,6 @@ export default function DashboardPage() {
         </button>
       </header>
 
-      {/* Main Body */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-6 space-y-8">
         <div className="flex items-center justify-between">
           <div>
@@ -148,7 +170,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
         <div className="flex border-b border-slate-800">
           <button
             onClick={() => setActiveTab('plans')}
@@ -182,41 +203,49 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Tab Content */}
         {loading ? (
           <div className="p-12 text-center text-slate-400 text-sm">
             Loading your dashboard library...
           </div>
         ) : activeTab === 'plans' ? (
-          /* SAVED PLANS TAB */
           savedPlans.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {savedPlans.map((plan) => (
                 <div
                   key={plan.id}
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors"
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-4"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h2 className="font-semibold text-lg text-slate-100">
-                        {plan.title || plan.plan_name || 'Weekly Meal Plan'}
+                        {plan.title || 'Weekly Performance Meal Plan'}
                       </h2>
                       <span className="text-xs text-slate-500">
                         {new Date(plan.created_at).toLocaleDateString()}
                       </span>
                     </div>
-                    <p className="text-slate-400 text-xs mb-4">
+                    <p className="text-slate-400 text-xs">
                       {plan.plan_data?.calendar?.length || 7}-Day Custom Performance Protocol
+                      {plan.plan_data?.estimatedCost ? ` • ${plan.plan_data.estimatedCost}` : ''}
                     </p>
                   </div>
 
-                  <div className="flex justify-between items-center border-t border-slate-800 pt-3 mt-2">
-                    <Link
-                      href="/"
-                      className="text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-1"
-                    >
-                      View Plan Details →
-                    </Link>
+                  <div className="flex justify-between items-center border-t border-slate-800 pt-3">
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setSelectedPlan(plan)}
+                        className="text-cyan-400 hover:text-cyan-300 text-xs font-semibold"
+                      >
+                        👁️ View Calendar Details
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('groceries')}
+                        className="text-slate-400 hover:text-slate-200 text-xs font-medium"
+                      >
+                        🛒 View Grocery List
+                      </button>
+                    </div>
+
                     <button
                       onClick={() => handleDeletePlan(plan.id)}
                       className="text-xs text-rose-400 hover:underline"
@@ -239,34 +268,107 @@ export default function DashboardPage() {
             </div>
           )
         ) : activeTab === 'groceries' ? (
-          /* GROCERY LISTS TAB */
           checklists.length > 0 ? (
-            <div className="space-y-6">
-              {checklists.map((checklist) => (
-                <div key={checklist.plan_id} className="space-y-2">
-                  <div className="flex justify-between items-center px-1">
-                    <h3 className="text-sm font-bold text-slate-200">
-                      {checklist.plan_title || 'Weekly Grocery List'}
-                    </h3>
-                    <span className="text-xs text-slate-500">
-                      Last updated: {new Date(checklist.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+            <div className="space-y-4">
+              {checklists.map((checklist) => {
+                const isOpen = !!openAccordions[checklist.plan_id];
+                const formattedDate = new Date(
+                  checklist.created_at || checklist.updated_at
+                ).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                });
+
+                return (
+                  <div
+                    key={checklist.plan_id}
+                    className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"
+                  >
+                    <div
+                      onClick={() => toggleAccordion(checklist.plan_id)}
+                      className="p-4 bg-slate-900 hover:bg-slate-800/60 cursor-pointer flex items-center justify-between border-b border-slate-800/80 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-cyan-400 font-bold text-sm">
+                          {isOpen ? '▼' : '►'}
+                        </span>
+
+                        {editingTitleId === checklist.plan_id ? (
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={tempTitle}
+                              onChange={(e) => setTempTitle(e.target.value)}
+                              onKeyDown={(e) =>
+                                e.key === 'Enter' && handleSaveTitle(checklist.plan_id, e)
+                              }
+                              className="bg-slate-950 border border-cyan-400 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                              autoFocus
+                            />
+                            <button
+                              onClick={(e) => handleSaveTitle(checklist.plan_id, e)}
+                              className="bg-cyan-500 text-slate-950 text-xs font-bold px-2 py-1 rounded"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white">
+                              {checklist.plan_title || `Grocery List (${formattedDate})`}
+                            </h3>
+                            <button
+                              onClick={(e) =>
+                                handleStartRename(
+                                  checklist.plan_id,
+                                  checklist.plan_title || '',
+                                  e
+                                )
+                              }
+                              className="text-[10px] text-slate-400 hover:text-cyan-400 px-1.5 py-0.5 rounded border border-slate-800 transition"
+                            >
+                              ✏️ Rename
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-cyan-400 font-mono bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                          📅 {formattedDate}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteChecklist(checklist.plan_id);
+                          }}
+                          className="text-xs text-rose-400 hover:underline"
+                        >
+                          Delete List
+                        </button>
+                      </div>
+                    </div>
+
+                    {isOpen && (
+                      <div className="p-4 bg-slate-950">
+                        <GroceryChecklist
+                          planId={checklist.plan_id}
+                          planTitle={checklist.plan_title}
+                          initialItems={checklist.items}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <GroceryChecklist
-                    planId={checklist.plan_id}
-                    planTitle={checklist.plan_title}
-                    initialItems={checklist.items}
-                    onDelete={() => handleDeleteChecklist(checklist.plan_id)}
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
               <p className="text-slate-400 text-sm">No active grocery lists saved yet.</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Generate a meal plan to automatically build and save your store-ready list here.
-              </p>
               <Link
                 href="/"
                 className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
@@ -275,65 +377,97 @@ export default function DashboardPage() {
               </Link>
             </div>
           )
-        ) : (
-          /* SAVED RECIPES TAB */
-          savedRecipes.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {savedRecipes.map((recipe) => (
-                <div
-                  key={recipe.id || recipe.recipe_name}
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-3"
-                >
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                        {recipe.meal_type || 'Recipe'}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteRecipe(recipe.recipe_name)}
-                        className="text-xs text-slate-500 hover:text-rose-400 transition-colors"
-                        title="Remove bookmark"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    <h3 className="font-semibold text-white text-sm leading-snug">
-                      {recipe.recipe_name}
-                    </h3>
-
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                      {recipe.calories ? <span>{recipe.calories} kcal</span> : null}
-                      {recipe.protein ? (
-                        <span className="text-cyan-400 font-medium">{recipe.protein}g protein</span>
-                      ) : null}
-                    </div>
+        ) : savedRecipes.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {savedRecipes.map((recipe) => (
+              <div
+                key={recipe.id || recipe.recipe_name}
+                className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-3"
+              >
+                <div className="space-y-2">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                      {recipe.meal_type || 'Recipe'}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteRecipe(recipe.recipe_name)}
+                      className="text-xs text-slate-500 hover:text-rose-400 transition-colors"
+                      title="Remove bookmark"
+                    >
+                      ✕
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => setSelectedRecipe(recipe)}
-                    className="w-full mt-2 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-400 rounded-lg transition-colors"
-                  >
-                    View Full Details
-                  </button>
+                  <h3 className="font-semibold text-white text-sm leading-snug">
+                    {recipe.recipe_name}
+                  </h3>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    {recipe.calories ? <span>{recipe.calories} kcal</span> : null}
+                    {recipe.protein ? (
+                      <span className="text-cyan-400 font-medium">{recipe.protein}g protein</span>
+                    ) : null}
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
-              <p className="text-slate-400 text-sm">No bookmarked recipes yet.</p>
-              <Link
-                href="/"
-                className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
-              >
-                Find and bookmark recipes →
-              </Link>
-            </div>
-          )
+
+                <button
+                  onClick={() => setSelectedRecipe(recipe)}
+                  className="w-full mt-2 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-400 rounded-lg transition-colors"
+                >
+                  View Full Details
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
+            <p className="text-slate-400 text-sm">No bookmarked recipes yet.</p>
+            <Link
+              href="/"
+              className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
+            >
+              Find and bookmark recipes →
+            </Link>
+          </div>
         )}
       </main>
 
-      {/* Recipe Modal */}
+      {selectedPlan && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">
+                  {selectedPlan.title || 'Weekly Protocol'}
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Saved on {new Date(selectedPlan.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPlan(null)}
+                className="text-slate-400 hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {selectedPlan.plan_data?.calendar && (
+              <MealPlanCalendar calendarDays={selectedPlan.plan_data.calendar} />
+            )}
+
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setSelectedPlan(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-xl transition-colors"
+              >
+                Close Protocol Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedRecipe && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
@@ -371,23 +505,26 @@ export default function DashboardPage() {
                 <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
                   {selectedRecipe.ingredients.map((ing: any, i: number) => (
                     <li key={i}>
-                      {typeof ing === 'string' ? ing : `${ing.item || ing.name} (${ing.amount || ''})`}
+                      {typeof ing === 'string'
+                        ? ing
+                        : `${ing.item || ing.name} (${ing.amount || ''})`}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {Array.isArray(selectedRecipe.instructions) && selectedRecipe.instructions.length > 0 && (
-              <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Instructions</h4>
-                <ol className="list-decimal list-inside text-xs text-slate-300 space-y-1">
-                  {selectedRecipe.instructions.map((step: string, i: number) => (
-                    <li key={i}>{step}</li>
-                  ))}
-                </ol>
-              </div>
-            )}
+            {Array.isArray(selectedRecipe.instructions) &&
+              selectedRecipe.instructions.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Instructions</h4>
+                  <ol className="list-decimal list-inside text-xs text-slate-300 space-y-1">
+                    {selectedRecipe.instructions.map((step: string, i: number) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
             <div className="pt-4 border-t border-slate-800 flex justify-end">
               <button
@@ -401,10 +538,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-      />
+      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </div>
   );
 }

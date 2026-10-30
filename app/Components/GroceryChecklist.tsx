@@ -39,17 +39,29 @@ export default function GroceryChecklist({
     'Pantry & Other',
   ];
 
+  const isRealDbPlan = Boolean(
+    planId &&
+    !planId.startsWith('plan-') &&
+    planId !== 'active-plan' &&
+    planId.length > 20
+  );
+
   useEffect(() => {
     async function initChecklist() {
       setLoading(true);
-      const saved: GroceryChecklistData | null = await getGroceryChecklist(planId);
-      
-      if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
-        setItems(saved.items);
-      } else if (rawIngredients && rawIngredients.length > 0) {
+
+      if (isRealDbPlan) {
+        const saved: GroceryChecklistData | null = await getGroceryChecklist(planId);
+        if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
+          setItems(saved.items);
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (rawIngredients && rawIngredients.length > 0) {
         const parsed = parseIngredientsToGroceryList(rawIngredients);
         setItems(parsed);
-        await saveGroceryChecklist(planId, parsed, planTitle);
       }
       setLoading(false);
     }
@@ -60,7 +72,7 @@ export default function GroceryChecklist({
       setItems(initialItems);
       setLoading(false);
     }
-  }, [planId, rawIngredients, initialItems, planTitle]);
+  }, [planId, rawIngredients, initialItems, isRealDbPlan]);
 
   const toggleItem = async (itemId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -68,9 +80,12 @@ export default function GroceryChecklist({
       item.id === itemId ? { ...item, checked: !item.checked } : item
     );
     setItems(updated);
-    setSaving(true);
-    await saveGroceryChecklist(planId, updated, planTitle);
-    setSaving(false);
+
+    if (isRealDbPlan) {
+      setSaving(true);
+      await saveGroceryChecklist(planId, updated, planTitle);
+      setSaving(false);
+    }
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -89,17 +104,23 @@ export default function GroceryChecklist({
     setItems(updated);
     setNewItemName('');
     setNewItemAmount('');
-    setSaving(true);
-    await saveGroceryChecklist(planId, updated, planTitle);
-    setSaving(false);
+
+    if (isRealDbPlan) {
+      setSaving(true);
+      await saveGroceryChecklist(planId, updated, planTitle);
+      setSaving(false);
+    }
   };
 
   const handleClearChecked = async () => {
     const updated = items.filter((i) => !i.checked);
     setItems(updated);
-    setSaving(true);
-    await saveGroceryChecklist(planId, updated, planTitle);
-    setSaving(false);
+
+    if (isRealDbPlan) {
+      setSaving(true);
+      await saveGroceryChecklist(planId, updated, planTitle);
+      setSaving(false);
+    }
   };
 
   const checkedCount = items.filter((i) => i.checked).length;
@@ -116,7 +137,6 @@ export default function GroceryChecklist({
 
   return (
     <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-6">
-      {/* HEADER & CONTROLS */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#1E2D4A] pb-4">
         <div>
           <h3 className="text-base font-black text-white flex items-center gap-2">
@@ -144,7 +164,6 @@ export default function GroceryChecklist({
         </div>
       </div>
 
-      {/* PROGRESS BAR */}
       <div className="space-y-2">
         <div className="flex justify-between items-center text-xs">
           <span className="text-gray-400">
@@ -160,7 +179,6 @@ export default function GroceryChecklist({
         </div>
       </div>
 
-      {/* ADD CUSTOM ITEM FORM */}
       <form onSubmit={handleAddItem} className="bg-[#162032] border border-[#1E2D4A] p-3 rounded-xl flex flex-col sm:flex-row gap-2 items-center">
         <input
           type="text"
@@ -195,7 +213,6 @@ export default function GroceryChecklist({
         </button>
       </form>
 
-      {/* CATEGORIZED LIST GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {categories.map((cat) => {
           const categoryItems = items.filter((i) => i.category === cat);

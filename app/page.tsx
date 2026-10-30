@@ -32,13 +32,11 @@ type WeeklySchedule = {
 export default function Home() {
   const [clientName, setClientName] = useState('');
 
-  // 1. Client Nutrition Layer
   const [clientCalories, setClientCalories] = useState<number | ''>('');
   const [clientProtein, setClientProtein] = useState<number | ''>('');
   const [clientExclusions, setClientExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
-  // 2. Household Scaling Layer
   const [household, setHousehold] = useState<HouseholdConfig>({
     adults: 1,
     teens: 0,
@@ -47,7 +45,6 @@ export default function Home() {
   });
   const [dislikeInput, setDislikeInput] = useState('');
 
-  // 3. Engine Preferences & Controls
   const [budget, setBudget] = useState('moderate');
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
   const [variety, setVariety] = useState(3);
@@ -55,7 +52,6 @@ export default function Home() {
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Supabase Saving States
   const [savingPlan, setSavingPlan] = useState(false);
   const [savePlanMessage, setSavePlanMessage] = useState<string | null>(null);
 
@@ -64,7 +60,6 @@ export default function Home() {
   const [activePlanId, setActivePlanId] = useState<string>('active-plan');
   const [estimatedCost, setEstimatedCost] = useState('');
 
-  // 4. Schedule Matrix State
   const [schedule, setSchedule] = useState<WeeklySchedule>({
     MON: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
     TUE: { Breakfast: { status: 'self', shared: false }, Lunch: { status: 'generate', shared: false }, Dinner: { status: 'generate', shared: true }, Snacks: { status: 'off', shared: false } },
@@ -179,11 +174,16 @@ export default function Home() {
         return;
       }
 
-      const planTitle = clientName
-        ? `${clientName}'s Weekly Performance Plan`
-        : 'Weekly Performance Meal Plan';
+      const creationDateStr = new Date().toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
 
-      // 1. Insert saved plan and retrieve the created record ID
+      const planTitle = clientName
+        ? `${clientName}'s Plan (${creationDateStr})`
+        : `Weekly Meal Plan (${creationDateStr})`;
+
       const { data: insertedPlan, error: planError } = await supabase
         .from('saved_plans')
         .insert({
@@ -197,24 +197,25 @@ export default function Home() {
           },
           created_at: new Date().toISOString(),
         })
-        .select()
+        .select('id')
         .single();
 
       if (planError) throw planError;
 
-      // 2. Parse ingredients from generated calendar
+      const targetPlanId = insertedPlan.id;
+      setActivePlanId(targetPlanId);
+
       const rawIngredients = weeklyCalendar.flatMap((day) =>
         day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
       );
       const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients);
+      const checklistTitle = clientName
+        ? `${clientName}'s Grocery List (${creationDateStr})`
+        : `Grocery List (${creationDateStr})`;
 
-      // 3. Save grocery list using the exact inserted plan ID
-      const targetPlanId = insertedPlan?.id || activePlanId;
-      const checklistTitle = clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List';
-      
       await saveGroceryChecklist(targetPlanId, parsedGroceryItems, checklistTitle);
 
-      setSavePlanMessage('Successfully saved plan & linked grocery list to your Library!');
+      setSavePlanMessage('Successfully saved plan & linked grocery list!');
     } catch (err: any) {
       console.error('Save error:', err);
       setSavePlanMessage(`Error saving plan: ${err.message || err}`);
@@ -367,7 +368,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* HEADER NAVIGATION */}
         <header className="border-b border-[#1E2D4A] pb-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="relative w-12 h-12 md:w-16 md:h-16 flex-shrink-0">
@@ -399,10 +399,8 @@ export default function Home() {
           </nav>
         </header>
 
-        {/* CONFIGURATION PANEL */}
         <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* COLUMN 1: CLIENT NUTRITION LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
               <div className="border-b border-[#1E2D4A] pb-3">
                 <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
@@ -499,7 +497,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* COLUMN 2: HOUSEHOLD SCALING LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4 flex flex-col justify-between">
               <div>
                 <div className="border-b border-[#1E2D4A] pb-3 mb-4">
@@ -513,7 +510,6 @@ export default function Home() {
 
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-2">
-                    {/* Adults Counter */}
                     <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
                       <div className="mb-2">
                         <div className="text-xs font-bold text-white">Adults</div>
@@ -538,7 +534,6 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Teens Counter */}
                     <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
                       <div className="mb-2">
                         <div className="text-xs font-bold text-white">Teens</div>
@@ -563,7 +558,6 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Children Counter */}
                     <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
                       <div className="mb-2">
                         <div className="text-xs font-bold text-white">Children</div>
@@ -589,7 +583,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Multiplier Readout */}
                   <div className="bg-[#0F1724]/80 border border-[#00F2FE]/30 p-2.5 rounded-lg text-center">
                     <span className="text-xs text-gray-300">
                       Shared Meal Multiplier: <strong className="text-[#00F2FE] text-sm">{totalPortionWeight}x Adult Portions</strong>
@@ -633,7 +626,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* VARIETY & BATCH PREP CONTROLS */}
           <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
             <div className="border-b border-[#1E2D4A] pb-3">
               <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
@@ -687,7 +679,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* SCHEDULE MATRIX */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -753,7 +744,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* DISCLAIMER & GENERATE ACTION BAR */}
           <div className="border-t border-[#1E2D4A] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
             <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300">
               <input
@@ -775,7 +765,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* RESULTS SECTION */}
         {weeklyCalendar && (
           <div id="results-section" className="space-y-8 pt-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#1E2D4A] pb-4">
@@ -811,10 +800,8 @@ export default function Home() {
               </div>
             )}
 
-            {/* WEEKLY MEAL CALENDAR */}
             <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
 
-            {/* INTERACTIVE DIGITAL GROCERY CHECKLIST */}
             <GroceryChecklist
               planId={activePlanId}
               planTitle={clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List'}
