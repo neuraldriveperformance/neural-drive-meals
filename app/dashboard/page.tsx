@@ -38,7 +38,7 @@ export default function DashboardPage() {
         setSavedRecipes(recipesData);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-      } font-medium {
+      } finally {
         setLoading(false);
       }
     }
@@ -257,3 +257,99 @@ export default function DashboardPage() {
                   >
                     View Full Details
                   </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
+              <p className="text-slate-400 text-sm">No bookmarked recipes yet.</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Click the 📑 bookmark icon on any meal card in the generator to pin it here.
+              </p>
+              <Link
+                href="/"
+                className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
+              >
+                Find and bookmark recipes →
+              </Link>
+            </div>
+          )
+        )}
+      </main>
+
+      {/* RECIPE DETAIL MODAL */}
+      {selectedRecipe && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-white">{selectedRecipe.recipe_name}</h2>
+                <p className="text-xs text-cyan-400">{selectedRecipe.meal_type}</p>
+              </div>
+              <button
+                onClick={() => setSelectedRecipe(null)}
+                className="text-slate-400 hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(selectedRecipe.calories || selectedRecipe.protein) && (
+              <div className="flex gap-4 text-xs bg-slate-950 p-3 rounded-lg border border-slate-800">
+                {selectedRecipe.calories && (
+                  <div>
+                    Calories: <strong className="text-white">{selectedRecipe.calories}</strong>
+                  </div>
+                )}
+                {selectedRecipe.protein && (
+                  <div>
+                    Protein: <strong className="text-cyan-400">{selectedRecipe.protein}g</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {Array.isArray(selectedRecipe.ingredients) && selectedRecipe.ingredients.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Ingredients</h4>
+                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
+                  {selectedRecipe.ingredients.map((ing: any, i: number) => (
+                    <li key={i}>
+                      {typeof ing === 'string' ? ing : `${ing.item || ing.name} (${ing.amount || ''})`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {Array.isArray(selectedRecipe.instructions) && selectedRecipe.instructions.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Instructions</h4>
+                <ol className="list-decimal list-inside text-xs text-slate-300 space-y-1">
+                  {selectedRecipe.instructions.map((step: string, i: number) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setSelectedRecipe(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Household & Nutrition Profile Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
+    </div>
+  );
+}
