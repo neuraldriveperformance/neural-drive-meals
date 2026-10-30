@@ -801,6 +801,7 @@ export default function Home() {
             {/* INTERACTIVE DIGITAL GROCERY CHECKLIST */}
             <GroceryChecklist
               planId={activePlanId}
+              planTitle={clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List'}
               rawIngredients={
                 weeklyCalendar.flatMap((day) =>
                   day.meals?.flatMap((meal: any) => meal.ingredients || []) || []

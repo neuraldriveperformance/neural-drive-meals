@@ -4,11 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
 import ProfileModal from '../Components/ProfileModal';
+import GroceryChecklist from '../Components/GroceryChecklist';
 import { getSavedRecipes, unsaveRecipe, SavedRecipe } from '@/lib/recipes';
+import { getAllUserChecklists, deleteGroceryChecklist } from '@/lib/grocery';
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<'plans' | 'recipes'>('plans');
+  const [activeTab, setActiveTab] = useState<'plans' | 'groceries' | 'recipes'>('plans');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
+  const [checklists, setChecklists] = useState<any[]>([]);
   const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<SavedRecipe | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -24,16 +27,18 @@ export default function DashboardPage() {
         );
 
         // 1. Fetch Saved Meal Plans
-        const { data: plansData, error: plansError } = await supabase
+        const { data: plansData } = await supabase
           .from('saved_plans')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!plansError && plansData) {
-          setSavedPlans(plansData);
-        }
+        if (plansData) setSavedPlans(plansData);
 
-        // 2. Fetch Bookmarked Recipes
+        // 2. Fetch Active Grocery Checklists
+        const userLists = await getAllUserChecklists();
+        setChecklists(userLists);
+
+        // 3. Fetch Bookmarked Recipes
         const recipesData = await getSavedRecipes();
         setSavedRecipes(recipesData);
       } catch (err) {
@@ -61,6 +66,13 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteChecklist = async (planId: string) => {
+    const success = await deleteGroceryChecklist(planId);
+    if (success) {
+      setChecklists((prev) => prev.filter((c) => c.plan_id !== planId));
+    }
+  };
+
   const handleDeleteRecipe = async (recipeName: string) => {
     const success = await unsaveRecipe(recipeName);
     if (success) {
@@ -73,21 +85,21 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Navigation Header */}
+      {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <span className="font-bold text-xl text-cyan-400 tracking-tight">
             NeuralDrive Meals
           </span>
           <nav className="flex space-x-4">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="text-slate-400 hover:text-white transition-colors text-sm font-medium"
             >
               Meal Generator
             </Link>
-            <Link 
-              href="/dashboard" 
+            <Link
+              href="/dashboard"
               className="text-cyan-400 font-medium text-sm border-b-2 border-cyan-400 pb-1"
             >
               Dashboard
@@ -116,7 +128,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Your Saved Library</h1>
             <p className="text-slate-400 text-sm mt-1">
-              Access your personal meal plans and recipe collection across all devices.
+              Access your meal plans, active grocery lists, and recipe bookmarks across all devices.
             </p>
           </div>
 
@@ -149,6 +161,16 @@ export default function DashboardPage() {
             Saved Meal Plans ({savedPlans.length})
           </button>
           <button
+            onClick={() => setActiveTab('groceries')}
+            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'groceries'
+                ? 'border-cyan-400 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Grocery Lists ({checklists.length})
+          </button>
+          <button
             onClick={() => setActiveTab('recipes')}
             className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'recipes'
@@ -160,10 +182,10 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Content Area */}
+        {/* Tab Content */}
         {loading ? (
           <div className="p-12 text-center text-slate-400 text-sm">
-            Loading your saved library...
+            Loading your dashboard library...
           </div>
         ) : activeTab === 'plans' ? (
           /* SAVED PLANS TAB */
@@ -216,6 +238,43 @@ export default function DashboardPage() {
               </Link>
             </div>
           )
+        ) : activeTab === 'groceries' ? (
+          /* GROCERY LISTS TAB */
+          checklists.length > 0 ? (
+            <div className="space-y-6">
+              {checklists.map((checklist) => (
+                <div key={checklist.plan_id} className="space-y-2">
+                  <div className="flex justify-between items-center px-1">
+                    <h3 className="text-sm font-bold text-slate-200">
+                      {checklist.plan_title || 'Weekly Grocery List'}
+                    </h3>
+                    <span className="text-xs text-slate-500">
+                      Last updated: {new Date(checklist.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <GroceryChecklist
+                    planId={checklist.plan_id}
+                    planTitle={checklist.plan_title}
+                    initialItems={checklist.items}
+                    onDelete={() => handleDeleteChecklist(checklist.plan_id)}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
+              <p className="text-slate-400 text-sm">No active grocery lists saved yet.</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Generate a meal plan to automatically build and save your store-ready list here.
+              </p>
+              <Link
+                href="/"
+                className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
+              >
+                Generate a plan →
+              </Link>
+            </div>
+          )
         ) : (
           /* SAVED RECIPES TAB */
           savedRecipes.length > 0 ? (
@@ -263,9 +322,6 @@ export default function DashboardPage() {
           ) : (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
               <p className="text-slate-400 text-sm">No bookmarked recipes yet.</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Expand any recipe card in the generator and click the <strong className="text-slate-300">🔖 Save</strong> button to pin it here.
-              </p>
               <Link
                 href="/"
                 className="inline-block mt-3 text-cyan-400 hover:underline text-sm font-medium"
@@ -277,7 +333,7 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* RECIPE DETAIL MODAL */}
+      {/* Recipe Modal */}
       {selectedRecipe && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
@@ -345,7 +401,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Household & Nutrition Profile Modal */}
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}

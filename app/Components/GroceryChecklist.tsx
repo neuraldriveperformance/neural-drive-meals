@@ -11,20 +11,30 @@ import {
 
 interface GroceryChecklistProps {
   planId?: string;
+  planTitle?: string;
   rawIngredients?: string[];
+  initialItems?: GroceryItem[];
+  onDelete?: () => void;
 }
 
 export default function GroceryChecklist({
   planId = 'default-plan',
+  planTitle = 'Weekly Grocery Checklist',
   rawIngredients = [],
+  initialItems,
+  onDelete,
 }: GroceryChecklistProps) {
-  const [items, setItems] = useState<GroceryItem[]>([]);
+  const [items, setItems] = useState<GroceryItem[]>(initialItems || []);
   const [customItemInput, setCustomItemInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load initial checklist state from Supabase or parse raw ingredients
   useEffect(() => {
     async function initChecklist() {
+      if (initialItems && initialItems.length > 0) {
+        setItems(initialItems);
+        return;
+      }
+
       if (planId) {
         const savedItems = await getGroceryChecklist(planId);
         if (savedItems && savedItems.length > 0) {
@@ -36,13 +46,15 @@ export default function GroceryChecklist({
       if (rawIngredients.length > 0) {
         const parsed = parseIngredientsToGroceryList(rawIngredients);
         setItems(parsed);
+        if (planId) {
+          await saveGroceryChecklist(planId, parsed, planTitle);
+        }
       }
     }
 
     initChecklist();
-  }, [planId, rawIngredients]);
+  }, [planId, rawIngredients, initialItems]);
 
-  // Toggle item checked state & auto-save
   const handleToggleItem = async (itemId: string) => {
     const updated = items.map((item) =>
       item.id === itemId ? { ...item, checked: !item.checked } : item
@@ -51,12 +63,11 @@ export default function GroceryChecklist({
 
     if (planId) {
       setIsSaving(true);
-      await saveGroceryChecklist(planId, updated);
+      await saveGroceryChecklist(planId, updated, planTitle);
       setIsSaving(false);
     }
   };
 
-  // Add custom grocery item (e.g., household items, extra snacks)
   const handleAddCustomItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customItemInput.trim()) return;
@@ -75,19 +86,18 @@ export default function GroceryChecklist({
 
     if (planId) {
       setIsSaving(true);
-      await saveGroceryChecklist(planId, updated);
+      await saveGroceryChecklist(planId, updated, planTitle);
       setIsSaving(false);
     }
   };
 
-  // Reset all checkmarks
   const handleResetChecklist = async () => {
     const reset = items.map((item) => ({ ...item, checked: false }));
     setItems(reset);
 
     if (planId) {
       setIsSaving(true);
-      await saveGroceryChecklist(planId, reset);
+      await saveGroceryChecklist(planId, reset, planTitle);
       setIsSaving(false);
     }
   };
@@ -111,12 +121,22 @@ export default function GroceryChecklist({
             </p>
           </div>
 
-          <button
-            onClick={handleResetChecklist}
-            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition self-start sm:self-auto"
-          >
-            Reset All
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleResetChecklist}
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition"
+            >
+              Reset All
+            </button>
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                className="text-xs bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 px-3 py-1.5 rounded-lg transition"
+              >
+                🗑️ Delete List
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Completion Bar */}
@@ -162,7 +182,7 @@ export default function GroceryChecklist({
                     <input
                       type="checkbox"
                       checked={item.checked}
-                      onChange={() => {}} // handled by parent onClick for clean mobile tap area
+                      onChange={() => {}}
                       className="w-4 h-4 rounded border-slate-700 text-cyan-500 focus:ring-0 focus:ring-offset-0 bg-slate-950"
                     />
                     <span className="text-xs font-medium leading-snug flex-1">
