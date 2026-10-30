@@ -209,52 +209,92 @@ export default function DashboardPage() {
           </div>
         ) : activeTab === 'plans' ? (
           savedPlans.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {savedPlans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-4"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h2 className="font-semibold text-lg text-slate-100">
-                        {plan.title || 'Weekly Performance Meal Plan'}
-                      </h2>
-                      <span className="text-xs text-slate-500">
-                        {new Date(plan.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-slate-400 text-xs">
-                      {plan.plan_data?.calendar?.length || 7}-Day Custom Performance Protocol
-                      {plan.plan_data?.estimatedCost ? ` • ${plan.plan_data.estimatedCost}` : ''}
-                    </p>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {savedPlans.map((plan) => {
+                const calendar = plan.plan_data?.calendar || plan.calendar || [];
+                const firstDay = calendar[0];
 
-                  <div className="flex justify-between items-center border-t border-slate-800 pt-3">
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setSelectedPlan(plan)}
-                        className="text-cyan-400 hover:text-cyan-300 text-xs font-semibold"
-                      >
-                        👁️ View Calendar Details
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('groceries')}
-                        className="text-slate-400 hover:text-slate-200 text-xs font-medium"
-                      >
-                        🛒 View Grocery List
-                      </button>
+                return (
+                  <div
+                    key={plan.id}
+                    className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 flex flex-col justify-between transition-colors space-y-4"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h2 className="font-bold text-lg text-slate-100">
+                          {plan.title || 'Weekly Performance Meal Plan'}
+                        </h2>
+                        <span className="text-xs text-slate-500 font-mono">
+                          {new Date(plan.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-xs mb-3">
+                        {calendar.length || 7}-Day Custom Performance Protocol
+                        {plan.plan_data?.estimatedCost ? ` • ${plan.plan_data.estimatedCost}` : ''}
+                      </p>
+
+                      {/* ENHANCED INLINE PREVIEW GRID */}
+                      {firstDay && (
+                        <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2">
+                          <div className="flex justify-between items-center text-[11px] font-bold text-cyan-400 border-b border-slate-800 pb-1">
+                            <span>DAY 1 PREVIEW ({firstDay.day || 'Day 1'})</span>
+                            {firstDay.totalCalories && (
+                              <span className="text-slate-400">{firstDay.totalCalories} kcal</span>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            {firstDay.meals && Object.entries(firstDay.meals).map(([mealType, meal]: [string, any]) => {
+                              if (!meal) return null;
+                              return (
+                                <div key={mealType} className="bg-slate-900 p-2 rounded border border-slate-800/60">
+                                  <span className="text-[9px] font-bold uppercase tracking-wider text-cyan-400 block mb-0.5">
+                                    {mealType}
+                                  </span>
+                                  <p className="font-semibold text-slate-200 text-xs truncate">
+                                    {meal.name || meal.title || 'Meal'}
+                                  </p>
+                                  {(meal.calories || meal.protein) && (
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                      {meal.calories ? `${meal.calories} kcal` : ''}
+                                      {meal.calories && meal.protein ? ' • ' : ''}
+                                      {meal.protein ? `${meal.protein}g P` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <button
-                      onClick={() => handleDeletePlan(plan.id)}
-                      className="text-xs text-rose-400 hover:underline"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex justify-between items-center border-t border-slate-800 pt-3">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setSelectedPlan(plan)}
+                          className="text-cyan-400 hover:text-cyan-300 text-xs font-semibold flex items-center gap-1"
+                        >
+                          👁️ View Full Calendar Details
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('groceries')}
+                          className="text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center gap-1"
+                        >
+                          🛒 Grocery List
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeletePlan(plan.id)}
+                        className="text-xs text-rose-400 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
@@ -452,8 +492,8 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {selectedPlan.plan_data?.calendar && (
-              <MealPlanCalendar calendarDays={selectedPlan.plan_data.calendar} />
+            {(selectedPlan.plan_data?.calendar || selectedPlan.calendar) && (
+              <MealPlanCalendar calendarDays={selectedPlan.plan_data?.calendar || selectedPlan.calendar} />
             )}
 
             <div className="pt-4 border-t border-slate-800 flex justify-end">
