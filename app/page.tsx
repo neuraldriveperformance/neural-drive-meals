@@ -6,6 +6,7 @@ import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryChecklist from './Components/GroceryChecklist';
 import { createClient } from '@/lib/supabaseClient';
 import { getUserProfile } from '@/lib/profile';
+import { parseIngredientsToGroceryList, saveGroceryChecklist } from '@/lib/grocery';
 
 const daysOfWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
@@ -182,26 +183,41 @@ export default function Home() {
         ? `${clientName}'s Weekly Performance Plan`
         : 'Weekly Performance Meal Plan';
 
-      const { error } = await supabase.from('saved_plans').insert({
-        user_id: user.id,
-        title: planTitle,
-        plan_data: {
-          calendar: weeklyCalendar,
-          estimatedCost,
-          household,
-          portionWeight: totalPortionWeight,
-        },
-        created_at: new Date().toISOString(),
-      });
+      // 1. Save Meal Plan
+      const { data: insertedPlan, error: planError } = await supabase
+        .from('saved_plans')
+        .insert({
+          user_id: user.id,
+          title: planTitle,
+          plan_data: {
+            calendar: weeklyCalendar,
+            estimatedCost,
+            household,
+            portionWeight: totalPortionWeight,
+          },
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-      if (error) {
-        console.error('Supabase Save Error:', error);
-        setSavePlanMessage('Failed to save meal plan.');
-      } else {
-        setSavePlanMessage('Successfully saved to your Library!');
-      }
+      if (planError) throw planError;
+
+      // 2. Extract & Parse Ingredients
+      const rawIngredients = weeklyCalendar.flatMap((day) =>
+        day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
+      );
+      const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients);
+
+      // 3. Upsert linked Grocery Checklist using the saved plan's ID
+      const targetPlanId = insertedPlan?.id || activePlanId;
+      const checklistTitle = clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List';
+      
+      await saveGroceryChecklist(targetPlanId, parsedGroceryItems, checklistTitle);
+
+      setSavePlanMessage('Successfully saved plan & linked grocery list to your Library!');
     } catch (err: any) {
-      setSavePlanMessage(`Error: ${err.message}`);
+      console.error('Save error:', err);
+      setSavePlanMessage(`Error saving plan: ${err.message || err}`);
     } finally {
       setSavingPlan(false);
     }
