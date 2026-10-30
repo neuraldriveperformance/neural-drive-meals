@@ -43,8 +43,8 @@ export default function MealPlanCalendar({
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [swappingMealId, setSwappingMealId] = useState<string | null>(null);
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
+  const [savingRecipeName, setSavingRecipeName] = useState<string | null>(null);
 
-  // Load existing bookmarked recipe names on mount
   useEffect(() => {
     async function loadBookmarks() {
       const recipes = await getSavedRecipes();
@@ -68,22 +68,29 @@ export default function MealPlanCalendar({
 
   const handleToggleBookmark = async (e: React.MouseEvent, meal: Meal) => {
     e.stopPropagation();
+    e.preventDefault();
+
+    setSavingRecipeName(meal.name);
     const isBookmarked = savedNames.has(meal.name);
 
-    if (isBookmarked) {
-      const success = await unsaveRecipe(meal.name);
-      if (success) {
-        setSavedNames((prev) => {
-          const next = new Set(prev);
-          next.delete(meal.name);
-          return next;
-        });
+    try {
+      if (isBookmarked) {
+        const success = await unsaveRecipe(meal.name);
+        if (success) {
+          setSavedNames((prev) => {
+            const next = new Set(prev);
+            next.delete(meal.name);
+            return next;
+          });
+        }
+      } else {
+        const saved = await saveRecipe(meal);
+        if (saved) {
+          setSavedNames((prev) => new Set(prev).add(meal.name));
+        }
       }
-    } else {
-      const saved = await saveRecipe(meal);
-      if (saved) {
-        setSavedNames((prev) => new Set(prev).add(meal.name));
-      }
+    } finally {
+      setSavingRecipeName(null);
     }
   };
 
@@ -188,6 +195,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                   const isExpanded = expandedMeal === mealId;
                   const isSwapping = swappingMealId === mealId;
                   const isBookmarked = savedNames.has(meal.name);
+                  const isSaving = savingRecipeName === meal.name;
 
                   return (
                     <div
@@ -201,18 +209,20 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                         </span>
 
                         <div className="flex items-center gap-1.5">
-                          {/* BOOKMARK BUTTON */}
+                          {/* HIGH VISIBILITY BOOKMARK BUTTON */}
                           <button
                             type="button"
                             onClick={(e) => handleToggleBookmark(e, meal)}
-                            title={isBookmarked ? 'Remove Bookmark' : 'Bookmark Recipe'}
-                            className={`text-xs transition ${
+                            disabled={isSaving}
+                            title={isBookmarked ? 'Remove from Saved Recipes' : 'Save to Recipe Library'}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md border transition flex items-center gap-1 ${
                               isBookmarked
-                                ? 'text-amber-400 scale-110'
-                                : 'text-gray-500 hover:text-amber-300'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                                : 'bg-[#0F1724] text-gray-400 border-[#1E2D4A] hover:text-white hover:border-gray-500'
                             }`}
                           >
-                            {isBookmarked ? '🔖' : '📑'}
+                            <span>{isSaving ? '⏳' : isBookmarked ? '🔖' : '🔖'}</span>
+                            <span>{isSaving ? '...' : isBookmarked ? 'Saved' : 'Bookmark'}</span>
                           </button>
 
                           {meal.prepTime && (
@@ -284,7 +294,18 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                           </div>
 
                           {/* ACTION BUTTON MATRIX */}
-                          <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[#1E2D4A]/50">
+                          <div className="grid grid-cols-4 gap-1 pt-2 border-t border-[#1E2D4A]/50">
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleBookmark(e, meal)}
+                              className={`py-1 rounded text-[9px] font-bold uppercase transition text-center border ${
+                                isBookmarked
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                  : 'bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border-[#1E2D4A]'
+                              }`}
+                            >
+                              {isBookmarked ? '🔖 Saved' : '🔖 Save'}
+                            </button>
                             <button
                               type="button"
                               onClick={() => handlePrintRecipe(meal)}
@@ -304,7 +325,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                                 type="button"
                                 onClick={() => handleSwapClick(dayPlan.day, meal.type, mealId)}
                                 disabled={isSwapping}
-                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center ${
+                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-cyan-400 border border-[#1E2D4A] py-1 rounded text-[9px] font-bold uppercase transition text-center ${
                                   isSwapping ? 'opacity-50 cursor-not-allowed' : ''
                                 }`}
                               >

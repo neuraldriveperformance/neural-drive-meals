@@ -43,25 +43,31 @@ export async function saveRecipe(recipe: any): Promise<SavedRecipe | null> {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user) {
+    alert('Please sign in to bookmark recipes!');
+    return null;
+  }
+
+  const payload = {
+    user_id: user.id,
+    recipe_name: recipe.name || recipe.title || 'Untitled Recipe',
+    meal_type: recipe.type || 'Meal',
+    calories: Number(recipe.calories) || 0,
+    protein: Number(recipe.protein) || 0,
+    ingredients: recipe.ingredients || [],
+    instructions: recipe.instructions || [],
+    full_data: recipe,
+  };
 
   const { data, error } = await supabase
     .from('saved_recipes')
-    .insert([{
-      user_id: user.id,
-      recipe_name: recipe.name || recipe.title || 'Untitled Recipe',
-      meal_type: recipe.type || recipe.mealType || 'Meal',
-      calories: recipe.calories || recipe.macros?.calories || 0,
-      protein: recipe.protein || recipe.macros?.protein || 0,
-      ingredients: recipe.ingredients || [],
-      instructions: recipe.instructions || [],
-      full_data: recipe,
-    }])
+    .insert([payload])
     .select()
     .single();
 
   if (error) {
     console.error('Error saving recipe:', error);
+    alert(`Failed to bookmark: ${error.message}`);
     return null;
   }
 
