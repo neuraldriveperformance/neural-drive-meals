@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import MealPlanCalendar from './Components/MealPlanCalendar';
-import GroceryList, { GroceryCategory } from './Components/GroceryList';
+import GroceryChecklist from './Components/GroceryChecklist';
 import { createClient } from '@/lib/supabaseClient';
 import { getUserProfile } from '@/lib/profile';
 
@@ -30,14 +30,14 @@ type WeeklySchedule = {
 
 export default function Home() {
   const [clientName, setClientName] = useState('');
-  
+
   // 1. Client Nutrition Layer
   const [clientCalories, setClientCalories] = useState<number | ''>('');
   const [clientProtein, setClientProtein] = useState<number | ''>('');
   const [clientExclusions, setClientExclusions] = useState<string[]>([]);
   const [exclusionInput, setExclusionInput] = useState('');
 
-  // 2. Household Scaling Layer with Adults, Teens, and Children
+  // 2. Household Scaling Layer
   const [household, setHousehold] = useState<HouseholdConfig>({
     adults: 1,
     teens: 0,
@@ -60,7 +60,7 @@ export default function Home() {
 
   const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
-  const [groceries, setGroceries] = useState<GroceryCategory[]>([]);
+  const [activePlanId, setActivePlanId] = useState<string>('active-plan');
   const [estimatedCost, setEstimatedCost] = useState('');
 
   // 4. Schedule Matrix State
@@ -76,7 +76,6 @@ export default function Home() {
 
   const supabase = createClient();
 
-  // Calculate Portion Weight based on Adult (1.0x), Teen (0.8x), and Child (0.5x) Coefficients
   const totalPortionWeight = Number(
     (household.adults * 1.0 + household.teens * 0.8 + household.children * 0.5).toFixed(1)
   );
@@ -90,22 +89,15 @@ export default function Home() {
     }
   }, []);
 
-  // Auto-prefill form inputs from Supabase Profile Settings
   useEffect(() => {
     async function loadProfileDefaults() {
       try {
         const profile = await getUserProfile();
         if (!profile) return;
 
-        if (profile.daily_calories) {
-          setClientCalories(profile.daily_calories);
-        }
-        if (profile.protein_grams) {
-          setClientProtein(profile.protein_grams);
-        }
-        if (profile.dietary_preferences && profile.dietary_preferences.length > 0) {
-          setClientExclusions(profile.dietary_preferences);
-        }
+        if (profile.daily_calories) setClientCalories(profile.daily_calories);
+        if (profile.protein_grams) setClientProtein(profile.protein_grams);
+        if (profile.dietary_preferences?.length) setClientExclusions(profile.dietary_preferences);
 
         if (profile.household_info) {
           const info = profile.household_info;
@@ -186,8 +178,8 @@ export default function Home() {
         return;
       }
 
-      const planTitle = clientName 
-        ? `${clientName}'s Weekly Performance Plan` 
+      const planTitle = clientName
+        ? `${clientName}'s Weekly Performance Plan`
         : 'Weekly Performance Meal Plan';
 
       const { error } = await supabase.from('saved_plans').insert({
@@ -195,7 +187,6 @@ export default function Home() {
         title: planTitle,
         plan_data: {
           calendar: weeklyCalendar,
-          groceries,
           estimatedCost,
           household,
           portionWeight: totalPortionWeight,
@@ -250,6 +241,8 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Failed to generate meal plan');
 
       const generatedCalendar = data.weeklyCalendar || [];
+      const newPlanId = `plan-${Date.now()}`;
+      setActivePlanId(newPlanId);
       setWeeklyCalendar(generatedCalendar);
       setEstimatedCost(data.estimatedGroceryCost || `$120 – $220 USD`);
 
@@ -264,17 +257,6 @@ export default function Home() {
         const updatedHistory = Array.from(new Set([...recipeHistory, ...newRecipeNames])).slice(-60);
         setRecipeHistory(updatedHistory);
         localStorage.setItem('ndp_recipe_history', JSON.stringify(updatedHistory));
-      }
-
-      if (data.groceries && Array.isArray(data.groceries)) {
-        const categoryMap: { [cat: string]: { item: string; amount: string }[] } = {};
-        data.groceries.forEach((g: any) => {
-          const cat = g.category || 'Produce & Pantry';
-          if (!categoryMap[cat]) categoryMap[cat] = [];
-          categoryMap[cat].push({ item: g.item || g.name || 'Item', amount: g.amount || g.quantity || '' });
-        });
-
-        setGroceries(Object.keys(categoryMap).map((cat) => ({ category: cat, items: categoryMap[cat] })));
       }
 
       setTimeout(() => {
@@ -362,6 +344,10 @@ export default function Home() {
     }
   };
 
+  const handlePrintFullProtocol = () => {
+    window.print();
+  };
+
   return (
     <main className="min-h-screen bg-[#070A0F] text-white p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -382,14 +368,14 @@ export default function Home() {
           </div>
 
           <nav className="flex items-center space-x-4">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="text-[#00F2FE] font-bold text-xs md:text-sm border-b-2 border-[#00F2FE] pb-1"
             >
               Generator
             </Link>
-            <Link 
-              href="/dashboard" 
+            <Link
+              href="/dashboard"
               className="text-gray-400 hover:text-white transition text-xs md:text-sm font-medium"
             >
               Dashboard
@@ -400,7 +386,6 @@ export default function Home() {
         {/* CONFIGURATION PANEL */}
         <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
             {/* COLUMN 1: CLIENT NUTRITION LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
               <div className="border-b border-[#1E2D4A] pb-3">
@@ -498,7 +483,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* COLUMN 2: EXPANDED HOUSEHOLD SCALING LAYER */}
+            {/* COLUMN 2: HOUSEHOLD SCALING LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4 flex flex-col justify-between">
               <div>
                 <div className="border-b border-[#1E2D4A] pb-3 mb-4">
@@ -511,7 +496,6 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Adult, Teen, and Child Counters */}
                   <div className="grid grid-cols-3 gap-2">
                     {/* Adults Counter */}
                     <div className="bg-[#0F1724] border border-[#1E2D4A] p-2.5 rounded-xl flex flex-col justify-between">
@@ -721,13 +705,13 @@ export default function Home() {
                               ? 'bg-[#00F2FE]/15 border border-[#00F2FE]/50 text-white'
                               : slotData.status === 'self'
                               ? 'bg-amber-500/15 border border-amber-500/50 text-amber-200'
-                              : 'bg-[#0F1724] text-gray-500 border border-[#1E2D4A] hover:text-gray-300'
+                              : 'bg-[#0F1724] border border-[#1E2D4A] text-gray-500'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex justify-between items-center">
                             <span>{type}</span>
-                            <span className="text-[9px] px-1 rounded bg-[#0F1724]">
-                              {slotData.status.toUpperCase()}
+                            <span className="text-[9px] uppercase font-mono">
+                              {slotData.status === 'generate' ? 'AI' : slotData.status === 'self' ? 'Self' : 'Off'}
                             </span>
                           </div>
 
@@ -735,13 +719,13 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={(e) => toggleMealShared(day, type, e)}
-                              className={`text-[9px] py-0.5 px-1.5 rounded flex items-center justify-between transition ${
+                              className={`text-[9px] px-1.5 py-0.5 rounded border self-start transition ${
                                 slotData.shared
-                                  ? 'bg-[#00F2FE] text-black font-extrabold'
-                                  : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
+                                  ? 'bg-[#00F2FE] text-black border-[#00F2FE] font-black'
+                                  : 'bg-[#0F1724] text-gray-400 border-[#1E2D4A]'
                               }`}
                             >
-                              <span>{slotData.shared ? '👨‍👩‍👧 Shared' : '👤 Solo'}</span>
+                              {slotData.shared ? '👨‍👩‍👧 Shared' : '👤 Solo'}
                             </button>
                           )}
                         </div>
@@ -753,67 +737,76 @@ export default function Home() {
             </div>
           </div>
 
-          {/* GENERATE ACTION AREA */}
-          <div className="pt-4 border-t border-[#1E2D4A] space-y-4">
-            <div className="flex items-center gap-3">
+          {/* DISCLAIMER & GENERATE ACTION BAR */}
+          <div className="border-t border-[#1E2D4A] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300">
               <input
                 type="checkbox"
-                id="disclaimer"
                 checked={disclaimerAgreed}
                 onChange={(e) => setDisclaimerAgreed(e.target.checked)}
-                className="w-4 h-4 accent-[#00F2FE] rounded cursor-pointer"
+                className="w-4 h-4 rounded border-gray-700 bg-[#0F1724] text-[#00F2FE] focus:ring-0"
               />
-              <label htmlFor="disclaimer" className="text-xs text-gray-400 cursor-pointer">
-                I understand these meal plans are generated algorithmically for performance guidelines and do not replace personalized medical advice.
-              </label>
-            </div>
+              <span>I confirm nutrition targets are for reference and I agree to the service disclaimer.</span>
+            </label>
 
             <button
-              type="button"
               onClick={handleGeneratePlan}
-              disabled={loading || !disclaimerAgreed}
-              className="w-full py-3.5 bg-[#00F2FE] hover:bg-[#00d8e4] disabled:opacity-50 text-black font-black text-sm uppercase tracking-wider rounded-xl transition shadow-lg shadow-[#00F2FE]/20"
+              disabled={loading}
+              className="w-full sm:w-auto bg-[#00F2FE] hover:bg-cyan-400 text-black font-black px-8 py-3.5 rounded-xl text-sm transition shadow-lg shadow-[#00F2FE]/10 disabled:opacity-50"
             >
-              {loading ? 'Building Precision Plan...' : 'Generate Performance Meal Plan'}
+              {loading ? 'Generating Precision Protocol...' : '⚡ Generate Performance Protocol'}
             </button>
           </div>
         </div>
 
         {/* RESULTS SECTION */}
         {weeklyCalendar && (
-          <div id="results-section" className="space-y-8 pt-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6">
+          <div id="results-section" className="space-y-8 pt-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#1E2D4A] pb-4">
               <div>
                 <h2 className="text-xl font-black text-white">Your Weekly Plan is Ready</h2>
-                <p className="text-xs text-gray-400 mt-1">
-                  Estimated Weekly Grocery Budget: <span className="text-[#00F2FE] font-bold">{estimatedCost}</span>
-                </p>
+                {estimatedCost && (
+                  <p className="text-xs text-gray-400 font-mono mt-0.5">
+                    Estimated Weekly Grocery Cost: {estimatedCost}
+                  </p>
+                )}
               </div>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-3">
                 <button
-                  type="button"
                   onClick={handleSavePlanToSupabase}
                   disabled={savingPlan}
-                  className="px-5 py-2.5 bg-[#162032] hover:bg-[#1E2D4A] border border-[#00F2FE]/50 text-[#00F2FE] font-bold text-xs rounded-xl transition flex-1 sm:flex-none"
+                  className="bg-[#162032] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#00F2FE]/50 font-bold px-4 py-2 rounded-xl text-xs transition"
                 >
-                  {savingPlan ? 'Saving...' : '💾 Save to Library'}
+                  {savingPlan ? 'Saving...' : '💾 Save Plan to Dashboard'}
+                </button>
+                <button
+                  onClick={handlePrintFullProtocol}
+                  className="bg-[#162032] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] font-bold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5"
+                >
+                  <span>🖨️</span> Print Protocol / PDF
                 </button>
               </div>
             </div>
 
             {savePlanMessage && (
-              <p
-                className={`text-xs px-2 ${
-                  savePlanMessage.includes('Successfully') ? 'text-[#00F2FE]' : 'text-rose-400'
-                }`}
-              >
+              <div className="text-xs text-[#00F2FE] bg-[#162032] border border-[#00F2FE]/40 p-3 rounded-xl">
                 {savePlanMessage}
-              </p>
+              </div>
             )}
 
+            {/* WEEKLY MEAL CALENDAR */}
             <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
-            <GroceryList categories={groceries} />
+
+            {/* INTERACTIVE DIGITAL GROCERY CHECKLIST */}
+            <GroceryChecklist
+              planId={activePlanId}
+              rawIngredients={
+                weeklyCalendar.flatMap((day) =>
+                  day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
+                )
+              }
+            />
           </div>
         )}
       </div>
