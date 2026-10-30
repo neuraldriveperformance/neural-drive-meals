@@ -32,6 +32,10 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
       setLoading(true);
       try {
+        useEffect(() => {
+    async function fetchDashboardData() {
+      setLoading(true);
+      try {
         const { data: plansData } = await supabase
           .from('saved_plans')
           .select('*')
@@ -53,13 +57,10 @@ export default function DashboardPage() {
       } finally {
         setLoading(false);
       }
+    }
 
     fetchDashboardData();
   }, []);
-
-  const toggleAccordion = (planId: string) => {
-    setOpenAccordions((prev) => ({ ...prev, [planId]: !prev[planId] }));
-  };
 
   const handleStartRename = (planId: string, currentTitle: string, e: React.MouseEvent) => {
     e.stopPropagation();
