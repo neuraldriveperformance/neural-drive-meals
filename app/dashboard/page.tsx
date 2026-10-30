@@ -264,7 +264,7 @@ export default function DashboardPage() {
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12">
               <p className="text-slate-400 text-sm">No bookmarked recipes yet.</p>
               <p className="text-xs text-slate-500 mt-1">
-                Click the 📑 bookmark icon on any meal card in the generator to pin it here.
+                Expand any recipe card in the generator and click the <strong className="text-slate-300">🔖 Save</strong> button to pin it here.
               </p>
               <Link
                 href="/"
