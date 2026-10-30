@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Instantiate OpenAI dynamically inside the handler (safely reads from env)
+    // Instantiate OpenAI dynamically inside the handler (safely reads key from env)
     const openai = new OpenAI({
       apiKey: apiKey.trim(),
     });

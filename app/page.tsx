@@ -48,7 +48,7 @@ export default function Home() {
   const [dislikeInput, setDislikeInput] = useState('');
 
   // 3. Engine Preferences & Controls
-  const [budget, setBudget] = useState('moderate');
+  const [budget, setBudget] = useState<'low' | 'moderate' | 'high'>('moderate');
   const [maxPrepTime, setMaxPrepTime] = useState('no-limit');
   const [variety, setVariety] = useState(3);
   const [bulkPrep, setBulkPrep] = useState(false);
@@ -122,10 +122,8 @@ export default function Home() {
   const handleVarietyChange = (newVariety: number) => {
     setVariety(newVariety);
     if (newVariety === 5) {
-      // Rule 1: Max variety disables bulk prep
       setBulkPrep(false);
     } else if (newVariety < 3) {
-      // Rule 3: Variety < 3 forces batch sessions to 1
       setBatchSessions(1);
     }
   };
@@ -654,11 +652,52 @@ export default function Home() {
             </div>
           </div>
 
+          {/* BUDGET TIER SELECTION SECTION */}
+          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
+            <div className="border-b border-[#1E2D4A] pb-3 flex justify-between items-center">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
+                3. Budget Tier & Ingredient Strategy
+              </h2>
+              <span className="text-xs font-bold text-[#00F2FE] capitalize">
+                {budget} Budget Tier
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(['low', 'moderate', 'high'] as const).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => setBudget(tier)}
+                  className={`py-3 px-4 rounded-xl text-xs font-bold transition border text-left flex flex-col justify-between ${
+                    budget === tier
+                      ? 'bg-[#00F2FE]/10 border-[#00F2FE] text-[#00F2FE]'
+                      : 'bg-[#0F1724] border-[#1E2D4A] text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="font-extrabold uppercase text-white">{tier} Budget</span>
+                    <span className="font-mono text-[#00F2FE]">
+                      {tier === 'low' && '$'}
+                      {tier === 'moderate' && '$$'}
+                      {tier === 'high' && '$$$'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-normal">
+                    {tier === 'low' && 'Economy staples (Eggs, lentils, chicken thighs, oats)'}
+                    {tier === 'moderate' && 'Standard whole foods (Chicken breast, ground beef, salmon)'}
+                    {tier === 'high' && 'Gourmet ingredients (Steaks, wild salmon, berries, herbs)'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* VARIETY & BATCH PREP CONTROLS */}
           <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
             <div className="border-b border-[#1E2D4A] pb-3">
               <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
-                3. Recipe Variety & Batch Cooking Strategy
+                4. Recipe Variety & Batch Cooking Strategy
               </h2>
             </div>
 
@@ -731,25 +770,22 @@ export default function Home() {
                         onClick={() => setBatchSessions(1)}
                         className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
                           batchSessions === 1
-                            ? 'bg-[#00F2FE]/20 text-[#00F2FE] border border-[#00F2FE]'
-                            : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
+                            ? 'bg-[#00F2FE] text-black'
+                            : 'bg-[#1E2D4A] text-gray-400'
                         }`}
                       >
                         1 Session (Sunday All-In)
                       </button>
                       <button
                         type="button"
-                        disabled={variety < 3}
                         onClick={() => setBatchSessions(2)}
                         className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
-                          variety < 3
-                            ? 'bg-[#162032] text-gray-600 border border-[#1E2D4A] cursor-not-allowed'
-                            : batchSessions === 2
-                            ? 'bg-[#00F2FE]/20 text-[#00F2FE] border border-[#00F2FE]'
-                            : 'bg-[#162032] text-gray-400 border border-[#1E2D4A]'
+                          batchSessions === 2
+                            ? 'bg-[#00F2FE] text-black'
+                            : 'bg-[#1E2D4A] text-gray-400'
                         }`}
                       >
-                        2 Sessions {variety < 3 ? '(Requires Variety 3+)' : '(Sun / Wed Split)'}
+                        2 Sessions (Sun/Wed Split)
                       </button>
                     </div>
                   </div>
@@ -758,61 +794,71 @@ export default function Home() {
             </div>
           </div>
 
-          {/* SCHEDULE MATRIX */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
+          {/* SCHEDULE MATRIX & GENERATE CONTROLS */}
+          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
+            <div className="border-b border-[#1E2D4A] pb-3 flex justify-between items-center">
               <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase">
-                  Weekly Schedule Matrix & Shared Toggles
-                </label>
-                <p className="text-[10px] text-gray-500">Click slot to cycle. Click badge to toggle 👤 Solo vs 👨‍👩‍👧 Shared.</p>
+                <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
+                  5. Weekly Schedule Matrix & Shared Toggles
+                </h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Click slot to cycle (GENERATE → SELF → OFF). Click badge to toggle Shared vs Solo.
+                </p>
               </div>
-              <div className="flex gap-3 text-[10px] font-semibold">
-                <span className="text-[#00F2FE]">● Generate</span>
-                <span className="text-amber-400">● Self-Provided</span>
-                <span className="text-gray-500">○ Off</span>
+              <div className="flex items-center gap-3 text-[10px]">
+                <span className="flex items-center gap-1 text-[#00F2FE]">● Generate</span>
+                <span className="flex items-center gap-1 text-amber-300">● Self-Provided</span>
+                <span className="flex items-center gap-1 text-gray-500">● Off</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {daysOfWeek.map((day) => (
-                <div key={day} className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-3 space-y-2 flex flex-col">
-                  <div className="text-center font-extrabold text-xs text-[#00F2FE] border-b border-[#1E2D4A] pb-1.5">
+                <div key={day} className="bg-[#0F1724] border border-[#1E2D4A] rounded-xl p-2.5 space-y-2">
+                  <div className="text-center font-extrabold text-[#00F2FE] text-xs border-b border-[#1E2D4A] pb-1.5">
                     {day}
                   </div>
-                  <div className="space-y-1.5 flex-1">
-                    {mealTypes.map((type) => {
-                      const slotData = schedule[day]?.[type] || { status: 'off', shared: false };
+                  <div className="space-y-1.5">
+                    {mealTypes.map((slot) => {
+                      const state = schedule[day]?.[slot] || { status: 'off', shared: false };
                       return (
                         <div
-                          key={type}
-                          onClick={() => cycleMealSlot(day, type)}
-                          className={`w-full text-left text-[11px] p-2 rounded font-bold transition flex flex-col gap-1 cursor-pointer select-none ${
-                            slotData.status === 'generate'
-                              ? 'bg-[#00F2FE]/15 border border-[#00F2FE]/50 text-white'
-                              : slotData.status === 'self'
-                              ? 'bg-amber-500/15 border border-amber-500/50 text-amber-200'
-                              : 'bg-[#0F1724] border border-[#1E2D4A] text-gray-500'
+                          key={slot}
+                          onClick={() => cycleMealSlot(day, slot)}
+                          className={`p-2 rounded-lg cursor-pointer text-left transition border relative ${
+                            state.status === 'generate'
+                              ? 'bg-[#00F2FE]/10 border-[#00F2FE]/40'
+                              : state.status === 'self'
+                              ? 'bg-amber-500/10 border-amber-500/40'
+                              : 'bg-[#162032] border-[#1E2D4A] opacity-50'
                           }`}
                         >
-                          <div className="flex justify-between items-center">
-                            <span>{type}</span>
-                            <span className="text-[9px] uppercase font-mono">
-                              {slotData.status === 'generate' ? 'AI' : slotData.status === 'self' ? 'Self' : 'Off'}
+                          <div className="flex justify-between items-center text-[10px] font-bold">
+                            <span className="text-gray-300">{slot}</span>
+                            <span
+                              className={
+                                state.status === 'generate'
+                                  ? 'text-[#00F2FE]'
+                                  : state.status === 'self'
+                                  ? 'text-amber-300'
+                                  : 'text-gray-500'
+                              }
+                            >
+                              {state.status.toUpperCase()}
                             </span>
                           </div>
 
-                          {slotData.status === 'generate' && (
+                          {state.status === 'generate' && (
                             <button
                               type="button"
-                              onClick={(e) => toggleMealShared(day, type, e)}
-                              className={`text-[9px] px-1.5 py-0.5 rounded border self-start transition ${
-                                slotData.shared
-                                  ? 'bg-[#00F2FE] text-black border-[#00F2FE] font-black'
-                                  : 'bg-[#0F1724] text-gray-400 border-[#1E2D4A]'
+                              onClick={(e) => toggleMealShared(day, slot, e)}
+                              className={`mt-1.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded border transition ${
+                                state.shared
+                                  ? 'bg-[#00F2FE] text-black border-[#00F2FE]'
+                                  : 'bg-[#1E2D4A] text-gray-300 border-[#1E2D4A]'
                               }`}
                             >
-                              {slotData.shared ? '👨‍👩‍👧 Shared' : '👤 Solo'}
+                              {state.shared ? '👥 Shared' : '👤 Solo'}
                             </button>
                           )}
                         </div>
@@ -824,73 +870,89 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="border-t border-[#1E2D4A] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300">
+          {/* DISCLAIMER & SUBMIT BUTTON */}
+          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+            <label className="flex items-center gap-3 cursor-pointer text-xs text-gray-300">
               <input
                 type="checkbox"
                 checked={disclaimerAgreed}
                 onChange={(e) => setDisclaimerAgreed(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-700 bg-[#0F1724] text-[#00F2FE] focus:ring-0"
+                className="w-4 h-4 accent-[#00F2FE] rounded cursor-pointer"
               />
-              <span>I confirm nutrition targets are for reference and I agree to the service disclaimer.</span>
+              <span>
+                I confirm nutrition targets are for reference and I agree to the service disclaimer.
+              </span>
             </label>
 
             <button
+              type="button"
+              disabled={loading || !disclaimerAgreed}
               onClick={handleGeneratePlan}
-              disabled={loading}
-              className="w-full sm:w-auto bg-[#00F2FE] hover:bg-cyan-400 text-black font-black px-8 py-3.5 rounded-xl text-sm transition shadow-lg shadow-[#00F2FE]/10 disabled:opacity-50"
+              className={`w-full md:w-auto px-8 py-3 rounded-xl font-black text-sm transition ${
+                loading || !disclaimerAgreed
+                  ? 'bg-[#1E2D4A] text-gray-500 cursor-not-allowed'
+                  : 'bg-[#00F2FE] text-black hover:bg-cyan-300 shadow-lg shadow-[#00F2FE]/20'
+              }`}
             >
-              {loading ? 'Generating Precision Protocol...' : '⚡ Generate Performance Protocol'}
+              {loading ? 'Generating Precision Protocol...' : 'Generate Precision Protocol'}
             </button>
           </div>
         </div>
 
+        {/* GENERATED RESULTS SECTION */}
         {weeklyCalendar && (
           <div id="results-section" className="space-y-8 pt-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#1E2D4A] pb-4">
-              <div>
-                <h2 className="text-xl font-black text-white">Your Weekly Plan is Ready</h2>
-                {estimatedCost && (
-                  <p className="text-xs text-gray-400 font-mono mt-0.5">
-                    Estimated Weekly Grocery Cost: {estimatedCost}
+            <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-[#1E2D4A] pb-4 gap-4">
+                <div>
+                  <h2 className="text-xl font-black text-[#00F2FE]">
+                    {clientName ? `${clientName}'s Protocol` : 'Active Precision Protocol'}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Estimated Weekly Household Grocery Cost: <strong className="text-white">{estimatedCost}</strong>
                   </p>
-                )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={savingPlan}
+                    onClick={handleSavePlanToSupabase}
+                    className="px-4 py-2 bg-[#00F2FE] text-black font-extrabold text-xs rounded-xl hover:bg-cyan-300 transition"
+                  >
+                    {savingPlan ? 'Saving Plan...' : '💾 Save Plan to Dashboard'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrintFullProtocol}
+                    className="px-4 py-2 bg-[#162032] border border-[#1E2D4A] text-gray-300 font-bold text-xs rounded-xl hover:text-white hover:bg-[#1E2D4A] transition"
+                  >
+                    🖨️ Print Protocol
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleSavePlanToSupabase}
-                  disabled={savingPlan}
-                  className="bg-[#162032] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#00F2FE]/50 font-bold px-4 py-2 rounded-xl text-xs transition"
-                >
-                  {savingPlan ? 'Saving...' : '💾 Save Plan to Dashboard'}
-                </button>
-                <button
-                  onClick={handlePrintFullProtocol}
-                  className="bg-[#162032] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] font-bold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5"
-                >
-                  <span>🖨️</span> Print Protocol / PDF
-                </button>
+              {savePlanMessage && (
+                <div className="p-3 bg-[#00F2FE]/10 border border-[#00F2FE]/30 text-[#00F2FE] rounded-xl text-xs font-bold">
+                  {savePlanMessage}
+                </div>
+              )}
+
+              {/* CALENDAR DISPLAY */}
+              <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
+
+              {/* GROCERY LIST CHECKLIST */}
+              <div className="pt-6 border-t border-[#1E2D4A]">
+                <GroceryChecklist
+                  planId={activePlanId}
+                  planTitle={clientName ? `${clientName}'s Grocery List` : 'Active Grocery List'}
+                  initialItems={weeklyCalendar.flatMap((day) =>
+                    day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
+                  )}
+                />
               </div>
             </div>
-
-            {savePlanMessage && (
-              <div className="text-xs text-[#00F2FE] bg-[#162032] border border-[#00F2FE]/40 p-3 rounded-xl">
-                {savePlanMessage}
-              </div>
-            )}
-
-            <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
-
-            <GroceryChecklist
-              planId={activePlanId}
-              planTitle={clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List'}
-              rawIngredients={
-                weeklyCalendar.flatMap((day) =>
-                  day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
-                )
-              }
-            />
           </div>
         )}
       </div>
