@@ -35,16 +35,22 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const protectedPages = ['/dashboard', '/saved-plans', '/profile'];
-  
-  const isVisitingProtectedPage = protectedPages.some((page) =>
-    request.nextUrl.pathname.startsWith(page)
-  );
+  const url = request.nextUrl.clone();
+  const pathname = url.pathname;
 
-  if (isVisitingProtectedPage && !user) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = '/login';
-    return NextResponse.redirect(loginUrl);
+  // Define routes accessible to unauthenticated users
+  const isPublicRoute = pathname === '/login' || pathname.startsWith('/auth');
+
+  // 1. Unauthenticated user accessing ANY protected route (including '/') -> Redirect to /login
+  if (!user && !isPublicRoute) {
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
+  }
+
+  // 2. Authenticated user visiting /login -> Redirect to home page
+  if (user && pathname === '/login') {
+    url.pathname = '/';
+    return NextResponse.redirect(url);
   }
 
   return response;
