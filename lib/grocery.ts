@@ -3,231 +3,227 @@ import { createBrowserClient } from '@supabase/ssr';
 export interface GroceryItem {
   id: string;
   name: string;
-  amount?: string;
   category: string;
+  amount: string;
   checked: boolean;
-  isCustom?: boolean;
 }
 
-export const AISLE_CATEGORIES = [
-  'Produce',
-  'Meat & Seafood',
-  'Dairy & Refrigerated',
-  'Pantry & Grains',
-  'Spices & Condiments',
-  'Other / Custom',
-] as const;
-
-export function categorizeIngredient(ingredientName: string): string {
-  const lower = ingredientName.toLowerCase();
-
-  if (
-    lower.includes('chicken') ||
-    lower.includes('beef') ||
-    lower.includes('salmon') ||
-    lower.includes('turkey') ||
-    lower.includes('steak') ||
-    lower.includes('pork') ||
-    lower.includes('fish') ||
-    lower.includes('shrimp') ||
-    lower.includes('bacon')
-  ) {
-    return 'Meat & Seafood';
-  }
-
-  if (
-    lower.includes('spinach') ||
-    lower.includes('broccoli') ||
-    lower.includes('asparagus') ||
-    lower.includes('avocado') ||
-    lower.includes('pepper') ||
-    lower.includes('onion') ||
-    lower.includes('garlic') ||
-    lower.includes('lemon') ||
-    lower.includes('lime') ||
-    lower.includes('berry') ||
-    lower.includes('berries') ||
-    lower.includes('apple') ||
-    lower.includes('banana') ||
-    lower.includes('sweet potato') ||
-    lower.includes('potato') ||
-    lower.includes('tomato') ||
-    lower.includes('lettuce') ||
-    lower.includes('kale') ||
-    lower.includes('greens')
-  ) {
-    return 'Produce';
-  }
-
-  if (
-    lower.includes('egg') ||
-    lower.includes('eggs') ||
-    lower.includes('milk') ||
-    lower.includes('cheese') ||
-    lower.includes('yogurt') ||
-    lower.includes('butter') ||
-    lower.includes('cream')
-  ) {
-    return 'Dairy & Refrigerated';
-  }
-
-  if (
-    lower.includes('oil') ||
-    lower.includes('salt') ||
-    lower.includes('pepper') ||
-    lower.includes('powder') ||
-    lower.includes('spice') ||
-    lower.includes('sauce') ||
-    lower.includes('dressing') ||
-    lower.includes('honey') ||
-    lower.includes('vinegar') ||
-    lower.includes('mustard') ||
-    lower.includes('tamari')
-  ) {
-    return 'Spices & Condiments';
-  }
-
-  return 'Pantry & Grains';
+export interface GroceryChecklistData {
+  id?: string;
+  user_id?: string;
+  plan_id: string;
+  plan_title: string;
+  items: GroceryItem[];
+  created_at?: string;
+  updated_at?: string;
 }
 
-// Convert raw ingredients into clean, deduplicated GroceryItems
-export function parseIngredientsToGroceryList(ingredients: string[]): GroceryItem[] {
-  const cleanIngredients = ingredients.filter(
-    (ing) =>
-      ing &&
-      !ing.toLowerCase().includes('self-provided') &&
-      !ing.toLowerCase().includes('prepared independently')
+const getSupabase = () =>
+  createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // Map to keep track of unique items
-  const itemMap = new Map<string, GroceryItem>();
+export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryItem[] {
+  const map = new Map<string, { amount: string; category: string }>();
 
-  cleanIngredients.forEach((ing, idx) => {
-    const trimmed = ing.trim();
-    if (!trimmed) return;
+  rawIngredients.forEach((ing) => {
+    let name = '';
+    let amount = '';
+    let category = 'Pantry & Other';
 
-    const lowerKey = trimmed.toLowerCase();
-
-    if (itemMap.has(lowerKey)) {
-      // If exact string duplicate, keep single consolidated item
-      return;
+    if (typeof ing === 'string') {
+      name = ing.trim();
+    } else if (ing && typeof ing === 'object') {
+      name = (ing.item || ing.name || '').trim();
+      amount = ing.amount || ing.quantity || '';
+      if (ing.category) category = ing.category;
     }
 
-    const category = categorizeIngredient(trimmed);
-    itemMap.set(lowerKey, {
-      id: `item-${idx}-${Date.now()}`,
-      name: trimmed,
-      category,
+    if (!name) return;
+
+    const lower = name.toLowerCase();
+    if (category === 'Pantry & Other') {
+      if (
+        lower.includes('chicken') ||
+        lower.includes('beef') ||
+        lower.includes('steak') ||
+        lower.includes('turkey') ||
+        lower.includes('salmon') ||
+        lower.includes('shrimp') ||
+        lower.includes('pork') ||
+        lower.includes('fish') ||
+        lower.includes('egg')
+      ) {
+        category = 'Meat & Seafood';
+      } else if (
+        lower.includes('spinach') ||
+        lower.includes('kale') ||
+        lower.includes('onion') ||
+        lower.includes('garlic') ||
+        lower.includes('pepper') ||
+        lower.includes('broccoli') ||
+        lower.includes('tomato') ||
+        lower.includes('lemon') ||
+        lower.includes('avocado') ||
+        lower.includes('berry') ||
+        lower.includes('apple')
+      ) {
+        category = 'Produce';
+      } else if (
+        lower.includes('milk') ||
+        lower.includes('cheese') ||
+        lower.includes('yogurt') ||
+        lower.includes('butter') ||
+        lower.includes('cream')
+      ) {
+        category = 'Dairy & Eggs';
+      } else if (
+        lower.includes('rice') ||
+        lower.includes('oats') ||
+        lower.includes('quinoa') ||
+        lower.includes('bread') ||
+        lower.includes('pasta') ||
+        lower.includes('tortilla')
+      ) {
+        category = 'Grains & Bakery';
+      }
+    }
+
+    const key = lower;
+    if (map.has(key)) {
+      const existing = map.get(key)!;
+      map.set(key, {
+        amount: existing.amount ? `${existing.amount}, ${amount}` : amount,
+        category: existing.category || category,
+      });
+    } else {
+      map.set(key, { amount, category });
+    }
+  });
+
+  const items: GroceryItem[] = [];
+  let index = 1;
+  map.forEach((value, key) => {
+    items.push({
+      id: `item-${index++}-${Date.now()}`,
+      name: key.replace(/\b\w/g, (c) => c.toUpperCase()),
+      category: value.category,
+      amount: value.amount,
       checked: false,
     });
   });
 
-  return Array.from(itemMap.values());
+  return items;
 }
 
-export async function saveGroceryChecklist(planId: string, items: GroceryItem[], planTitle?: string): Promise<boolean> {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+export async function saveGroceryChecklist(
+  planId: string,
+  items: GroceryItem[],
+  planTitle?: string
+): Promise<boolean> {
+  const supabase = getSupabase();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const { error } = await supabase.from('grocery_checklists').upsert(
+      {
+        user_id: user.id,
+        plan_id: planId,
+        plan_title: planTitle || 'Weekly Grocery List',
+        items,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,plan_id' }
+    );
 
-  if (!user) return false;
-
-  const { error } = await supabase.from('grocery_checklists').upsert(
-    {
-      user_id: user.id,
-      plan_id: planId,
-      plan_title: planTitle || 'Weekly Grocery Checklist',
-      items: items,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id,plan_id' }
-  );
-
-  if (error) {
-    console.error('Error saving grocery checklist:', error);
+    if (error) {
+      console.error('Error saving grocery checklist:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to save grocery checklist:', err);
     return false;
   }
-
-  return true;
 }
 
-export async function getGroceryChecklist(planId: string): Promise<GroceryItem[] | null> {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+export async function updateChecklistTitle(planId: string, newTitle: string): Promise<boolean> {
+  const supabase = getSupabase();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('grocery_checklists')
+      .update({ plan_title: newTitle, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('plan_id', planId);
 
-  if (!user) return null;
-
-  const { data, error } = await supabase
-    .from('grocery_checklists')
-    .select('items')
-    .eq('user_id', user.id)
-    .eq('plan_id', planId)
-    .single();
-
-  if (error || !data) return null;
-
-  return data.items as GroceryItem[];
+    return !error;
+  } catch (err) {
+    console.error('Error updating checklist title:', err);
+    return false;
+  }
 }
 
-export async function getAllUserChecklists(): Promise<any[]> {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+export async function getGroceryChecklist(planId: string): Promise<GroceryChecklistData | null> {
+  const supabase = getSupabase();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('grocery_checklists')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('plan_id', planId)
+      .single();
 
-  if (!user) return [];
+    if (error || !data) return null;
+    return data as GroceryChecklistData;
+  } catch (err) {
+    console.error('Error fetching checklist:', err);
+    return null;
+  }
+}
 
-  const { data, error } = await supabase
-    .from('grocery_checklists')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('updated_at', { ascending: false });
+export async function getAllUserChecklists(): Promise<GroceryChecklistData[]> {
+  const supabase = getSupabase();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  if (error) {
-    console.error('Error fetching checklists:', error);
+    const { data, error } = await supabase
+      .from('grocery_checklists')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+    return data as GroceryChecklistData[];
+  } catch (err) {
+    console.error('Error fetching all checklists:', err);
     return [];
   }
-
-  return data || [];
 }
 
 export async function deleteGroceryChecklist(planId: string): Promise<boolean> {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = getSupabase();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('grocery_checklists')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('plan_id', planId);
 
-  if (!user) return false;
-
-  const { error } = await supabase
-    .from('grocery_checklists')
-    .delete()
-    .eq('user_id', user.id)
-    .eq('plan_id', planId);
-
-  if (error) {
-    console.error('Error deleting checklist:', error);
+    return !error;
+  } catch (err) {
+    console.error('Error deleting grocery checklist:', err);
     return false;
   }
-
-  return true;
 }

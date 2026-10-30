@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   GroceryItem,
+  GroceryChecklistData,
   parseIngredientsToGroceryList,
   saveGroceryChecklist,
   getGroceryChecklist,
@@ -41,7 +42,8 @@ export default function GroceryChecklist({
   useEffect(() => {
     async function initChecklist() {
       setLoading(true);
-      const saved = await getGroceryChecklist(planId);
+      const saved: GroceryChecklistData | null = await getGroceryChecklist(planId);
+      
       if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
         setItems(saved.items);
       } else if (rawIngredients && rawIngredients.length > 0) {
