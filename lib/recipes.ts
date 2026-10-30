@@ -9,7 +9,7 @@ export interface SavedRecipe {
   protein?: number;
   ingredients?: any;
   instructions?: any;
-  full_data: any;
+  full_data?: any;
   created_at?: string;
 }
 
@@ -19,7 +19,9 @@ export async function getSavedRecipes(): Promise<SavedRecipe[]> {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return [];
 
   const { data, error } = await supabase
@@ -42,13 +44,17 @@ export async function saveRecipe(recipe: any): Promise<SavedRecipe | null> {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   if (!user) {
     alert('Please sign in to bookmark recipes!');
     return null;
   }
 
-  const payload = {
+  // Primary payload with full metadata
+  const payload: any = {
     user_id: user.id,
     recipe_name: recipe.name || recipe.title || 'Untitled Recipe',
     meal_type: recipe.type || 'Meal',
@@ -59,11 +65,30 @@ export async function saveRecipe(recipe: any): Promise<SavedRecipe | null> {
     full_data: recipe,
   };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('saved_recipes')
     .insert([payload])
     .select()
     .single();
+
+  // Fallback to basic payload if schema column mismatch occurs
+  if (error) {
+    console.warn('Full payload insert failed, retrying with core columns:', error.message);
+    const fallbackPayload = {
+      user_id: user.id,
+      recipe_name: recipe.name || recipe.title || 'Untitled Recipe',
+      meal_type: recipe.type || 'Meal',
+    };
+
+    const retry = await supabase
+      .from('saved_recipes')
+      .insert([fallbackPayload])
+      .select()
+      .single();
+
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     console.error('Error saving recipe:', error);
@@ -80,7 +105,9 @@ export async function unsaveRecipe(recipeName: string): Promise<boolean> {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return false;
 
   const { error } = await supabase
