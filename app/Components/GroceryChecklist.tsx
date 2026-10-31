@@ -39,18 +39,14 @@ export default function GroceryChecklist({
     'Pantry & Other',
   ];
 
-  const isRealDbPlan = Boolean(
-    planId &&
-    !planId.startsWith('plan-') &&
-    planId !== 'active-plan' &&
-    planId.length > 20
-  );
+  const checkIsRealDbPlan = (id: string) =>
+    Boolean(id && !id.startsWith('plan-') && id !== 'active-plan' && id.length > 20);
 
   useEffect(() => {
     async function initChecklist() {
       setLoading(true);
 
-      if (isRealDbPlan) {
+      if (checkIsRealDbPlan(planId)) {
         const saved: GroceryChecklistData | null = await getGroceryChecklist(planId);
         if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
           setItems(saved.items);
@@ -66,13 +62,26 @@ export default function GroceryChecklist({
       setLoading(false);
     }
 
-    if (!initialItems) {
-      initChecklist();
-    } else {
+    if (initialItems && initialItems.length > 0) {
       setItems(initialItems);
       setLoading(false);
+    } else {
+      initChecklist();
     }
-  }, [planId, rawIngredients, initialItems, isRealDbPlan]);
+  }, [planId, rawIngredients, initialItems]);
+
+  const persistItems = async (updatedItems: GroceryItem[]) => {
+    if (checkIsRealDbPlan(planId)) {
+      setSaving(true);
+      try {
+        await saveGroceryChecklist(planId, updatedItems, planTitle);
+      } catch (err) {
+        console.error('Failed to sync checklist to Supabase:', err);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
 
   const toggleItem = async (itemId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -80,12 +89,7 @@ export default function GroceryChecklist({
       item.id === itemId ? { ...item, checked: !item.checked } : item
     );
     setItems(updated);
-
-    if (isRealDbPlan) {
-      setSaving(true);
-      await saveGroceryChecklist(planId, updated, planTitle);
-      setSaving(false);
-    }
+    await persistItems(updated);
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -104,23 +108,13 @@ export default function GroceryChecklist({
     setItems(updated);
     setNewItemName('');
     setNewItemAmount('');
-
-    if (isRealDbPlan) {
-      setSaving(true);
-      await saveGroceryChecklist(planId, updated, planTitle);
-      setSaving(false);
-    }
+    await persistItems(updated);
   };
 
   const handleClearChecked = async () => {
     const updated = items.filter((i) => !i.checked);
     setItems(updated);
-
-    if (isRealDbPlan) {
-      setSaving(true);
-      await saveGroceryChecklist(planId, updated, planTitle);
-      setSaving(false);
-    }
+    await persistItems(updated);
   };
 
   const checkedCount = items.filter((i) => i.checked).length;
