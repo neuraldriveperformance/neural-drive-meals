@@ -46,29 +46,32 @@ export default function GroceryChecklist({
     async function initChecklist() {
       setLoading(true);
 
+      // 1. ALWAYS query Supabase first for saved database plans to get fresh check states
       if (checkIsRealDbPlan(planId)) {
         const saved: GroceryChecklistData | null = await getGroceryChecklist(planId);
         if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
-          setItems(saved.items);
+          const cleanItems = saved.items.map((i: any) => ({
+            ...i,
+            checked: Boolean(i.checked),
+          }));
+          setItems(cleanItems);
           setLoading(false);
           return;
         }
       }
 
-      if (rawIngredients && rawIngredients.length > 0) {
+      // 2. Fall back to initialItems or rawIngredients if no saved DB checklist exists yet
+      if (initialItems && initialItems.length > 0) {
+        setItems(initialItems.map((i) => ({ ...i, checked: Boolean(i.checked) })));
+      } else if (rawIngredients && rawIngredients.length > 0) {
         const parsed = parseIngredientsToGroceryList(rawIngredients);
         setItems(parsed);
       }
       setLoading(false);
     }
 
-    if (initialItems && initialItems.length > 0) {
-      setItems(initialItems);
-      setLoading(false);
-    } else {
-      initChecklist();
-    }
-  }, [planId, rawIngredients, initialItems]);
+    initChecklist();
+  }, [planId, rawIngredients]);
 
   const persistItems = async (updatedItems: GroceryItem[]) => {
     if (checkIsRealDbPlan(planId)) {

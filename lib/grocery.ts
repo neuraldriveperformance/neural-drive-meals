@@ -40,7 +40,7 @@ function normalizeItemName(rawName: string): string {
 
 function determineCategory(name: string, fallbackCategory = 'Pantry & Other'): string {
   if (fallbackCategory !== 'Pantry & Other') return fallbackCategory;
-  
+
   const lower = name.toLowerCase();
   if (/\b(chicken|beef|steak|turkey|salmon|shrimp|pork|fish|egg|eggs|tofu|tempeh)\b/.test(lower)) {
     return 'Meat & Seafood';
@@ -158,12 +158,21 @@ export async function saveGroceryChecklist(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
+    // Explicitly format items to ensure `checked` boolean is preserved accurately
+    const formattedItems = items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      amount: item.amount || '',
+      checked: Boolean(item.checked),
+    }));
+
     const { error } = await supabase.from('grocery_checklists').upsert(
       {
         user_id: user.id,
         plan_id: planId,
         plan_title: planTitle || 'Weekly Grocery List',
-        items,
+        items: formattedItems,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,plan_id' }
@@ -176,6 +185,40 @@ export async function saveGroceryChecklist(
     return true;
   } catch (err) {
     console.error('Failed to save grocery checklist:', err);
+    return false;
+  }
+}
+
+export async function updateGroceryChecklistItems(planId: string, items: GroceryItem[]): Promise<boolean> {
+  const supabase = getSupabase();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const formattedItems = items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      amount: item.amount || '',
+      checked: Boolean(item.checked),
+    }));
+
+    const { error } = await supabase
+      .from('grocery_checklists')
+      .update({
+        items: formattedItems,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id)
+      .eq('plan_id', planId);
+
+    if (error) {
+      console.error('Error updating checklist items:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to update checklist items:', err);
     return false;
   }
 }
@@ -213,7 +256,16 @@ export async function getGroceryChecklist(planId: string): Promise<GroceryCheckl
       .single();
 
     if (error || !data) return null;
-    return data as GroceryChecklistData;
+
+    // Normalize incoming items array to strictly enforce booleans
+    const cleanItems = Array.isArray(data.items)
+      ? data.items.map((i: any) => ({ ...i, checked: Boolean(i.checked) }))
+      : [];
+
+    return {
+      ...data,
+      items: cleanItems,
+    } as GroceryChecklistData;
   } catch (err) {
     console.error('Error fetching checklist:', err);
     return null;
@@ -233,7 +285,13 @@ export async function getAllUserChecklists(): Promise<GroceryChecklistData[]> {
       .order('created_at', { ascending: false });
 
     if (error || !data) return [];
-    return data as GroceryChecklistData[];
+
+    return data.map((checklist: any) => ({
+      ...checklist,
+      items: Array.isArray(checklist.items)
+        ? checklist.items.map((i: any) => ({ ...i, checked: Boolean(i.checked) }))
+        : [],
+    })) as GroceryChecklistData[];
   } catch (err) {
     console.error('Error fetching all checklists:', err);
     return [];
