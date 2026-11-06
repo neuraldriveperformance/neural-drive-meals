@@ -339,7 +339,7 @@ export default function Home() {
           weeklySchedule: schedule,
           varietyLevel: variety,
           enableBulkPrep: activeBulkPrep,
-          batchSessions: activeBulkPrep ? activeBatchSessions : 1,
+          batchSessions: activeBatchSessions,
           maxPrepTime,
           recipeHistory: combinedExclusions,
           seed: `${Date.now()}-${Math.random()}`,
@@ -453,17 +453,18 @@ export default function Home() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <div className="flex justify-between items-center mb-1">
+                    <div className="flex justify-between items-center mb-1 gap-1">
                       <label className="block text-[10px] font-bold text-gray-400 uppercase">
                         Daily Calories
                       </label>
+                      {/* CLEAN TDEE BUTTON WITHOUT EMOJI */}
                       <a
                         href="https://tdeecalculator.net/"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[9px] font-semibold text-[#00F2FE] hover:underline"
+                        className="inline-flex items-center text-[10px] font-extrabold text-[#00F2FE] hover:text-cyan-300 bg-[#0F1724] hover:bg-[#1E2D4A] border border-[#00F2FE]/50 px-2 py-1 rounded transition-all shadow-sm"
                       >
-                        Calculate TDEE ↗
+                        Estimate My Calorie Needs ↗
                       </a>
                     </div>
                     <input
@@ -732,252 +733,159 @@ export default function Home() {
 
               <div className="bg-[#0F1724] border border-[#1E2D4A] p-3 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-2">
-                      <span>Enable Batch Cooking Strategy</span>
-                      {variety === 5 && (
-                        <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded border border-rose-500/30">
-                          Disabled on Max Variety
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-gray-400">
-                      Reuses cooked proteins/grains across consecutive slots
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
+                  <span className="text-xs font-bold text-white">Enable Bulk Prep</span>
+                  <input
+                    type="checkbox"
+                    checked={bulkPrep}
                     disabled={variety === 5}
-                    onClick={() => setBulkPrep(!bulkPrep)}
-                    className={`px-4 py-1.5 rounded-lg font-black text-xs transition ${
-                      variety === 5
-                        ? 'bg-[#162032] text-gray-600 border border-[#1E2D4A] cursor-not-allowed'
-                        : bulkPrep
-                        ? 'bg-[#00F2FE] text-black'
-                        : 'bg-[#1E2D4A] text-gray-400'
-                    }`}
-                  >
-                    {variety === 5 ? 'LOCKED' : bulkPrep ? 'ENABLED' : 'DISABLED'}
-                  </button>
+                    onChange={(e) => setBulkPrep(e.target.checked)}
+                    className="w-4 h-4 rounded border-[#1E2D4A] bg-[#0F1724] text-[#00F2FE] focus:ring-0 cursor-pointer disabled:opacity-40"
+                  />
                 </div>
-
-                {bulkPrep && variety < 5 && (
-                  <div className="pt-2 border-t border-[#1E2D4A] flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">Prep Frequency:</span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setBatchSessions(1)}
-                        className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
-                          batchSessions === 1
-                            ? 'bg-[#00F2FE] text-black'
-                            : 'bg-[#1E2D4A] text-gray-400'
-                        }`}
-                      >
-                        1 Session (Sunday All-In)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBatchSessions(2)}
-                        className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
-                          batchSessions === 2
-                            ? 'bg-[#00F2FE] text-black'
-                            : 'bg-[#1E2D4A] text-gray-400'
-                        }`}
-                      >
-                        2 Sessions (Sun/Wed Split)
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* SCHEDULE MATRIX & GENERATE CONTROLS */}
-          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
-            <div className="border-b border-[#1E2D4A] pb-3 flex justify-between items-center">
-              <div>
-                <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
-                  5. Weekly Schedule Matrix & Shared Toggles
-                </h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Click slot to cycle (GENERATE → SELF → OFF). Click badge to toggle Shared vs Solo.
-                </p>
-              </div>
-              <div className="flex items-center gap-3 text-[10px]">
-                <span className="flex items-center gap-1 text-[#00F2FE]">● Generate</span>
-                <span className="flex items-center gap-1 text-amber-300">● Self-Provided</span>
-                <span className="flex items-center gap-1 text-gray-500">● Off</span>
-              </div>
+        {/* SCHEDULE MATRIX & GENERATE CONTROLS */}
+        <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-6">
+          <div className="flex justify-between items-center border-b border-[#1E2D4A] pb-3">
+            <h2 className="text-xs font-black uppercase tracking-wider text-[#00F2FE]">
+              5. Weekly Schedule & Shared Meal Matrix
+            </h2>
+            <div className="text-[11px] text-gray-400">
+              Click slot to toggle: <span className="text-[#00F2FE] font-bold">Generate</span> | <span className="text-amber-400 font-bold">Self-Provided</span> | <span className="text-gray-500 font-bold">Off</span>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-              {daysOfWeek.map((day) => (
-                <div key={day} className="bg-[#0F1724] border border-[#1E2D4A] rounded-xl p-2.5 space-y-2">
-                  <div className="text-center font-extrabold text-[#00F2FE] text-xs border-b border-[#1E2D4A] pb-1.5">
-                    {day}
-                  </div>
-                  <div className="space-y-1.5">
-                    {mealTypes.map((slot) => {
-                      const state = schedule[day]?.[slot] || { status: 'off', shared: false };
-                      return (
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            {daysOfWeek.map((day) => (
+              <div key={day} className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-3 space-y-2">
+                <div className="text-center font-extrabold text-[#00F2FE] text-xs border-b border-[#1E2D4A] pb-1">
+                  {day}
+                </div>
+                {mealTypes.map((slot) => {
+                  const state = schedule[day]?.[slot] || { status: 'off', shared: false };
+
+                  return (
+                    <div
+                      key={slot}
+                      onClick={() => cycleMealSlot(day, slot)}
+                      className={`p-2 rounded-lg cursor-pointer transition flex flex-col justify-between space-y-1.5 border select-none ${
+                        state.status === 'generate'
+                          ? 'bg-[#00F2FE]/10 border-[#00F2FE] text-white'
+                          : state.status === 'self'
+                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                          : 'bg-[#0F1724] border-[#1E2D4A] text-gray-600'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center text-[10px] font-extrabold uppercase">
+                        <span>{slot}</span>
+                        <span>
+                          {state.status === 'generate' ? '⚡ Gen' : state.status === 'self' ? '🍽️ Self' : '—'}
+                        </span>
+                      </div>
+
+                      {state.status === 'generate' && (
                         <div
-                          key={slot}
-                          onClick={() => cycleMealSlot(day, slot)}
-                          className={`p-2 rounded-lg cursor-pointer text-left transition border relative ${
-                            state.status === 'generate'
-                              ? 'bg-[#00F2FE]/10 border-[#00F2FE]/40'
-                              : state.status === 'self'
-                              ? 'bg-amber-500/10 border-amber-500/40'
-                              : 'bg-[#162032] border-[#1E2D4A] opacity-50'
+                          onClick={(e) => toggleMealShared(day, slot, e)}
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold text-center border transition ${
+                            state.shared
+                              ? 'bg-[#00F2FE] text-black border-[#00F2FE]'
+                              : 'bg-[#0F1724] text-gray-400 border-[#1E2D4A] hover:border-gray-500'
                           }`}
                         >
-                          <div className="flex justify-between items-center text-[10px] font-bold">
-                            <span className="text-gray-300">{slot}</span>
-                            <span
-                              className={
-                                state.status === 'generate'
-                                  ? 'text-[#00F2FE]'
-                                  : state.status === 'self'
-                                  ? 'text-amber-300'
-                                  : 'text-gray-500'
-                              }
-                            >
-                              {state.status.toUpperCase()}
-                            </span>
-                          </div>
-
-                          {state.status === 'generate' && (
-                            <button
-                              type="button"
-                              onClick={(e) => toggleMealShared(day, slot, e)}
-                              className={`mt-1.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded border transition ${
-                                state.shared
-                                  ? 'bg-[#00F2FE] text-black border-[#00F2FE]'
-                                  : 'bg-[#1E2D4A] text-gray-300 border-[#1E2D4A]'
-                              }`}
-                            >
-                              {state.shared ? '👥 Shared' : '👤 Solo'}
-                            </button>
-                          )}
+                          {state.shared ? `👨‍👩‍👧 Shared (${totalPortionWeight}x)` : '👤 Solo (1.0x)'}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
 
-          {/* DISCLAIMER & SUBMIT BUTTON */}
-          <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-            <label className="flex items-center gap-3 cursor-pointer text-xs text-gray-300">
+          <div className="pt-4 border-t border-[#1E2D4A] space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={disclaimerAgreed}
                 onChange={(e) => setDisclaimerAgreed(e.target.checked)}
-                className="w-4 h-4 accent-[#00F2FE] rounded cursor-pointer"
+                className="w-4 h-4 rounded border-[#1E2D4A] bg-[#0F1724] text-[#00F2FE] focus:ring-0 cursor-pointer"
               />
-              <span>
-                I confirm nutrition targets are for reference and I agree to the service disclaimer.
+              <span className="text-xs text-gray-400 leading-snug">
+                I understand that NeuralDrive Performance provides non-medical nutrition guidelines. 
+                Consult with a qualified healthcare provider before altering your dietary regimen.
               </span>
             </label>
 
             <button
               type="button"
-              disabled={loading || !disclaimerAgreed}
               onClick={handleGeneratePlan}
-              className={`w-full md:w-auto px-8 py-3 rounded-xl font-black text-sm transition ${
-                loading || !disclaimerAgreed
-                  ? 'bg-[#1E2D4A] text-gray-500 cursor-not-allowed'
-                  : 'bg-[#00F2FE] text-black hover:bg-cyan-300 shadow-lg shadow-[#00F2FE]/20'
-              }`}
+              disabled={loading}
+              className="w-full bg-[#00F2FE] hover:bg-cyan-400 text-black font-black text-sm py-3.5 rounded-xl uppercase tracking-wider transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-[#00F2FE]/10"
             >
-              {loading ? 'Generating Precision Protocol...' : 'Generate Precision Protocol'}
+              {loading ? (
+                <>
+                  <span className="animate-spin">🌀</span> Generating Protocol...
+                </>
+              ) : (
+                '🚀 Generate Performance Meal Plan'
+              )}
             </button>
           </div>
         </div>
 
-        {/* GENERATED RESULTS SECTION */}
+        {/* RESULTS SECTION */}
         {weeklyCalendar && (
           <div id="results-section" className="space-y-8 pt-4">
-            <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-[#1E2D4A] pb-4 gap-4">
-                <div>
-                  <h2 className="text-xl font-black text-[#00F2FE]">
-                    {clientName ? `${clientName}'s Protocol` : 'Active Precision Protocol'}
-                  </h2>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Estimated Weekly Household Grocery Cost: <strong className="text-white">{estimatedCost}</strong>
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={savingPlan}
-                    onClick={handleSavePlanToSupabase}
-                    className="px-4 py-2 bg-[#00F2FE] text-black font-extrabold text-xs rounded-xl hover:bg-cyan-300 transition"
-                  >
-                    {savingPlan ? 'Saving Plan...' : '💾 Save Plan to Dashboard'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handlePrintFullProtocol}
-                    className="px-4 py-2 bg-[#162032] border border-[#1E2D4A] text-gray-300 font-bold text-xs rounded-xl hover:text-white hover:bg-[#1E2D4A] transition"
-                  >
-                    🖨️ Print Protocol
-                  </button>
-                </div>
+            <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h2 className="text-lg font-black text-white">
+                  {clientName ? `${clientName}'s` : 'Generated'} Weekly Protocol
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Estimated Grocery Cost: <strong className="text-[#00F2FE]">{estimatedCost}</strong>
+                </p>
               </div>
 
-              {savePlanMessage && (
-                <div className="p-3 bg-[#00F2FE]/10 border border-[#00F2FE]/30 text-[#00F2FE] rounded-xl text-xs font-bold">
-                  {savePlanMessage}
-                </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSavePlanToSupabase}
+                  disabled={savingPlan}
+                  className="bg-[#00F2FE] hover:bg-cyan-400 text-black font-bold px-4 py-2 rounded-xl text-xs transition disabled:opacity-50"
+                >
+                  {savingPlan ? 'Saving...' : '💾 Save Plan & Checklist'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintFullProtocol}
+                  className="bg-[#162032] hover:bg-[#1E2D4A] text-white border border-[#1E2D4A] font-bold px-4 py-2 rounded-xl text-xs transition"
+                >
+                  🖨️ Print Protocol
+                </button>
+              </div>
+            </div>
+
+            {savePlanMessage && (
+              <div className="bg-[#162032] border border-[#00F2FE]/50 text-[#00F2FE] p-3 rounded-xl text-xs font-mono text-center">
+                {savePlanMessage}
+              </div>
+            )}
+
+            <MealPlanCalendar
+              calendarDays={weeklyCalendar}
+              onSwapMeal={handleSwapMeal}
+            />
+
+            <GroceryChecklist
+              planId={activePlanId}
+              planTitle={clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List'}
+              rawIngredients={weeklyCalendar.flatMap((day) =>
+                day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
               )}
-
-              {/* CALENDAR DISPLAY */}
-              <MealPlanCalendar calendarDays={weeklyCalendar} onSwapMeal={handleSwapMeal} />
-
-              {/* GROCERY LIST CHECKLIST FIXED PARSER */}
-              <div className="pt-6 border-t border-[#1E2D4A]">
-                <GroceryChecklist
-                  planId={activePlanId}
-                  planTitle={clientName ? `${clientName}'s Grocery List` : 'Active Grocery List'}
-                  initialItems={parseIngredientsToGroceryList(
-                    weeklyCalendar.flatMap((day) =>
-                      day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
-                    )
-                  )}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-        {/* GENERATION LOADING OVERLAY */}
-        {loading && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 space-y-6">
-            <div className="relative w-20 h-20">
-              <div className="absolute inset-0 rounded-full border-4 border-[#1E2D4A]" />
-              <div className="absolute inset-0 rounded-full border-4 border-[#00F2FE] border-t-transparent animate-spin" />
-            </div>
-
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-black text-[#00F2FE] tracking-wide animate-pulse">
-                GENERATING PRECISION PROTOCOL
-              </h3>
-              <p className="text-xs text-gray-400 max-w-sm">
-                Analyzing client macros, scaling household portions, and applying budget constraints...
-              </p>
-            </div>
-
-            <div className="w-64 bg-[#162032] border border-[#1E2D4A] h-2 rounded-full overflow-hidden">
-              <div className="bg-[#00F2FE] h-full w-full animate-pulse" />
-            </div>
+            />
           </div>
         )}
       </div>
