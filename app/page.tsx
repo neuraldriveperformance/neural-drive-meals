@@ -222,10 +222,11 @@ export default function Home() {
       const targetPlanId = insertedPlan.id;
       setActivePlanId(targetPlanId);
 
+      const activeBulkPrep = variety === 5 ? false : bulkPrep;
       const rawIngredients = weeklyCalendar.flatMap((day) =>
         day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
       );
-      const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients);
+      const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients, activeBulkPrep);
       const checklistTitle = clientName
         ? `${clientName}'s Grocery List (${creationDateStr})`
         : `Grocery List (${creationDateStr})`;
@@ -279,10 +280,56 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Failed to generate meal plan');
 
       const generatedCalendar = data.weeklyCalendar || [];
-      const newPlanId = `plan-${Date.now()}`;
-      setActivePlanId(newPlanId);
       setWeeklyCalendar(generatedCalendar);
       setEstimatedCost(data.estimatedGroceryCost || `$120 – $220 USD`);
+
+      // AUTO-SAVE TO SUPABASE IMMEDIATELY AFTER GENERATION
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setSavingPlan(true);
+        const creationDateStr = new Date().toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+        const planTitle = clientName
+          ? `${clientName}'s Plan (${creationDateStr})`
+          : `Weekly Meal Plan (${creationDateStr})`;
+
+        const { data: insertedPlan, error: planError } = await supabase
+          .from('saved_plans')
+          .insert({
+            user_id: user.id,
+            title: planTitle,
+            plan_data: {
+              calendar: generatedCalendar,
+              estimatedCost: data.estimatedGroceryCost || `$120 – $220 USD`,
+              household,
+              portionWeight: totalPortionWeight,
+              budgetLevel: budget,
+            },
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (!planError && insertedPlan) {
+          const targetPlanId = insertedPlan.id;
+          setActivePlanId(targetPlanId);
+
+          const rawIngredients = generatedCalendar.flatMap((day: any) =>
+            day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
+          );
+          const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients, activeBulkPrep);
+          const checklistTitle = clientName
+            ? `${clientName}'s Grocery List (${creationDateStr})`
+            : `Grocery List (${creationDateStr})`;
+
+          await saveGroceryChecklist(targetPlanId, parsedGroceryItems, checklistTitle);
+          setSavePlanMessage('Auto-saved plan & linked grocery list to your dashboard!');
+        }
+        setSavingPlan(false);
+      }
 
       const newRecipeNames: string[] = [];
       generatedCalendar.forEach((dayObj: any) => {
@@ -457,7 +504,6 @@ export default function Home() {
                       <label className="block text-[10px] font-bold text-gray-400 uppercase">
                         Daily Calories
                       </label>
-                      {/* CLEAN TDEE BUTTON WITHOUT EMOJI */}
                       <a
                         href="https://tdeecalculator.net/"
                         target="_blank"
