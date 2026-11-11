@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
-import { standardizeIngredient } from './units';
+import { standardizeIngredient } from '@/lib/units';
 
 export interface GroceryItem {
   id: string;
@@ -31,8 +31,8 @@ function normalizeItemName(rawName: string): string {
   let name = rawName.toLowerCase();
 
   // Strip common modifiers (comma separated or standalone words)
-  name = name.replace(/,\s*(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry)/g, '');
-  name = name.replace(/\b(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry)\b/g, '');
+  name = name.replace(/,\s*(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry|uncooked)/g, '');
+  name = name.replace(/\b(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry|uncooked)\b/g, '');
   name = name.replace(/\s+/g, ' ').trim();
 
   // Return formatted Title Case
@@ -58,14 +58,28 @@ function determineCategory(name: string, fallbackCategory = 'Pantry & Other'): s
   return 'Pantry & Other';
 }
 
-export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryItem[] {
-  // Map key format: "NormalizedName_unit"
-  const map = new Map<string, { totalQuantity: number; unit: string; category: string; originalName: string }>();
+/**
+ * Cross-recipe ingredient aggregation & bulk-prep scaling parser
+ */
+export function parseIngredientsToGroceryList(
+  rawIngredients: any[],
+  enableBulkPrep: boolean = false
+): GroceryItem[] {
+  // Key format: "NormalizedName" -> Stores accumulated base quantity
+  const map = new Map<string, { 
+    totalQuantity: number; 
+    unit: string; 
+    category: string; 
+    originalName: string;
+    seenBatchRecipes: Set<string>;
+  }>();
 
   rawIngredients.forEach((ing) => {
     let rawStr = '';
     let explicitAmount = '';
     let categoryInput = 'Pantry & Other';
+    let recipeOwner = '';
+    let isBatchRecipe = false;
 
     if (typeof ing === 'string') {
       rawStr = ing.trim();
@@ -73,21 +87,24 @@ export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryIte
       rawStr = (ing.item || ing.name || '').trim();
       explicitAmount = ing.amount || ing.quantity || '';
       if (ing.category) categoryInput = ing.category;
+      if (ing.recipeName) recipeOwner = ing.recipeName;
+      if (ing.isBatch || ing.bulkPrep) isBatchRecipe = true;
     }
 
     if (!rawStr || rawStr.includes('Self-provided')) return;
 
-    // Combine explicit amount and item string if separate, e.g. "1.4 Cup" + "Cooked Quinoa"
+    // COMBINE QUANTITY & NAME
     const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
-
-    // Regex to match quantity (digits/fractions), optional unit, and remaining ingredient name
     const match = fullText.match(/^([\d\.\/]+)\s*([A-Za-z]+)?\s+(.*)$/);
 
+    let qty = 1;
+    let rawUnit = '';
+    let rawItemName = fullText;
+
     if (match) {
-      let qty = 0;
       const rawQty = match[1];
-      const rawUnit = match[2] ? match[2].trim() : '';
-      const rawItemName = match[3] ? match[3].trim() : fullText;
+      rawUnit = match[2] ? match[2].trim() : '';
+      rawItemName = match[3] ? match[3].trim() : fullText;
 
       if (rawQty.includes('/')) {
         const [num, den] = rawQty.split('/');
@@ -95,36 +112,32 @@ export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryIte
       } else {
         qty = parseFloat(rawQty);
       }
+    }
 
-      const normalized = normalizeItemName(rawItemName);
-      const category = determineCategory(normalized, categoryInput);
-      const key = `${normalized}_${rawUnit.toLowerCase()}`;
+    const normalized = normalizeItemName(rawItemName);
+    const category = determineCategory(normalized, categoryInput);
+    const key = normalized;
 
-      if (map.has(key)) {
-        const existing = map.get(key)!;
-        existing.totalQuantity += qty;
-      } else {
-        map.set(key, {
-          totalQuantity: qty,
-          unit: rawUnit,
-          category,
-          originalName: normalized,
-        });
+    if (!map.has(key)) {
+      map.set(key, {
+        totalQuantity: 0,
+        unit: rawUnit,
+        category,
+        originalName: normalized,
+        seenBatchRecipes: new Set<string>(),
+      });
+    }
+
+    const entry = map.get(key)!;
+
+    // BULK PREP LOGIC: If bulkPrep is active, count batch recipe ingredients only ONCE per recipe
+    if (enableBulkPrep && isBatchRecipe && recipeOwner) {
+      if (!entry.seenBatchRecipes.has(recipeOwner)) {
+        entry.seenBatchRecipes.add(recipeOwner);
+        entry.totalQuantity += qty;
       }
     } else {
-      // Fallback when no numeric quantity is found
-      const normalized = normalizeItemName(rawStr);
-      const category = determineCategory(normalized, categoryInput);
-      const key = `${normalized}_nounit`;
-
-      if (!map.has(key)) {
-        map.set(key, {
-          totalQuantity: 1,
-          unit: '',
-          category,
-          originalName: normalized,
-        });
-      }
+      entry.totalQuantity += qty;
     }
   });
 
@@ -132,10 +145,14 @@ export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryIte
   let index = 1;
 
   map.forEach((val) => {
-    const roundedQty = parseFloat(val.totalQuantity.toFixed(2));
-    const rawCombinedString = val.unit ? `${roundedQty} ${val.unit} ${val.originalName}` : `${roundedQty} ${val.originalName}`;
+    if (val.totalQuantity <= 0) return;
 
-    // Standardize total quantity & unit into Imperial + Metric dual format
+    const roundedQty = parseFloat(val.totalQuantity.toFixed(2));
+    const rawCombinedString = val.unit
+      ? `${roundedQty} ${val.unit} ${val.originalName}`
+      : `${roundedQty} ${val.originalName}`;
+
+    // Run combined totals through dual-unit standardizer
     const standardized = standardizeIngredient(rawCombinedString);
 
     items.push({
@@ -162,7 +179,6 @@ export async function saveGroceryChecklist(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    // Explicitly format items to ensure `checked` boolean is preserved accurately
     const formattedItems = items.map((item) => ({
       id: item.id,
       name: item.name,
@@ -261,7 +277,6 @@ export async function getGroceryChecklist(planId: string): Promise<GroceryCheckl
 
     if (error || !data) return null;
 
-    // Normalize incoming items array to strictly enforce booleans
     const cleanItems = Array.isArray(data.items)
       ? data.items.map((i: any) => ({ ...i, checked: Boolean(i.checked) }))
       : [];
