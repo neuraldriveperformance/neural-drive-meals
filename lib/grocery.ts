@@ -1,3 +1,4 @@
+// lib/grocery.ts
 import { createBrowserClient } from '@supabase/ssr';
 import { standardizeIngredient } from '@/lib/units';
 
@@ -65,21 +66,18 @@ export function parseIngredientsToGroceryList(
   rawIngredients: any[],
   enableBulkPrep: boolean = false
 ): GroceryItem[] {
-  // Key format: "NormalizedName" -> Stores accumulated base quantity
   const map = new Map<string, { 
     totalQuantity: number; 
     unit: string; 
     category: string; 
     originalName: string;
-    seenBatchRecipes: Set<string>;
+    seenCount: number;
   }>();
 
   rawIngredients.forEach((ing) => {
     let rawStr = '';
     let explicitAmount = '';
     let categoryInput = 'Pantry & Other';
-    let recipeOwner = '';
-    let isBatchRecipe = false;
 
     if (typeof ing === 'string') {
       rawStr = ing.trim();
@@ -87,8 +85,6 @@ export function parseIngredientsToGroceryList(
       rawStr = (ing.item || ing.name || '').trim();
       explicitAmount = ing.amount || ing.quantity || '';
       if (ing.category) categoryInput = ing.category;
-      if (ing.recipeName) recipeOwner = ing.recipeName;
-      if (ing.isBatch || ing.bulkPrep) isBatchRecipe = true;
     }
 
     if (!rawStr || rawStr.includes('Self-provided')) return;
@@ -124,18 +120,16 @@ export function parseIngredientsToGroceryList(
         unit: rawUnit,
         category,
         originalName: normalized,
-        seenBatchRecipes: new Set<string>(),
+        seenCount: 0,
       });
     }
 
     const entry = map.get(key)!;
+    entry.seenCount += 1;
 
-    // BULK PREP LOGIC: If bulkPrep is active, count batch recipe ingredients only ONCE per recipe
-    if (enableBulkPrep && isBatchRecipe && recipeOwner) {
-      if (!entry.seenBatchRecipes.has(recipeOwner)) {
-        entry.seenBatchRecipes.add(recipeOwner);
-        entry.totalQuantity += qty;
-      }
+    // BULK PREP FIX: Caps repeated batch ingredient multiplications
+    if (enableBulkPrep && entry.seenCount > 2) {
+      entry.totalQuantity += qty * 0.25;
     } else {
       entry.totalQuantity += qty;
     }
@@ -152,7 +146,7 @@ export function parseIngredientsToGroceryList(
       ? `${roundedQty} ${val.unit} ${val.originalName}`
       : `${roundedQty} ${val.originalName}`;
 
-    // Run combined totals through dual-unit standardizer
+    // Standardize total quantity & unit into Imperial + Metric dual format
     const standardized = standardizeIngredient(rawCombinedString);
 
     items.push({

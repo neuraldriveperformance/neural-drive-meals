@@ -4,20 +4,17 @@ export interface FormattedIngredient {
   originalName: string;
   normalizedName: string;
   category: string;
-  primaryAmount: string; // Imperial standard (e.g. "1.5 lbs (24 oz)")
-  metricAmount: string;  // Metric standard (e.g. "680 g")
-  dualDisplay: string;   // Full string (e.g. "1.5 lbs (24 oz) / 680 g")
-  rawQuantityGrams?: number; // Base weight in grams for precise cross-recipe aggregation
+  primaryAmount: string; // Imperial standard (e.g. "4.38 cups")
+  metricAmount: string;  // Metric standard (e.g. "1050 ml")
+  dualDisplay: string;   // Full string (e.g. "4.38 cups / 1050 ml")
+  rawQuantityGrams?: number;
 }
 
-// Gram/ml weights per standard unit for density estimates
 const DENSITY_CONVERSIONS: Record<string, number> = {
-  // Grains (raw/uncooked)
   rice_cup: 185,
   oats_cup: 90,
   quinoa_cup: 170,
   flour_cup: 120,
-  // Liquids
   water_cup: 240,
   milk_cup: 245,
   oil_tbsp: 14,
@@ -48,9 +45,6 @@ function normalizeName(rawName: string): string {
   return name.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-/**
-  Parse quantity strings including fractions ("1 1/2", "3/4", "1.5")
- */
 function parseQuantity(rawQty: string): number {
   if (!rawQty) return 1;
   const parts = rawQty.trim().split(' ');
@@ -70,9 +64,6 @@ function parseQuantity(rawQty: string): number {
   return total || 1;
 }
 
-/**
- * Standardize any ingredient string into Imperial + Metric dual units
- */
 export function standardizeIngredient(rawInput: string | any): FormattedIngredient {
   let rawStr = '';
   let explicitAmount = '';
@@ -85,8 +76,6 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
   }
 
   const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
-  
-  // Match regex: [Quantity] [Unit] [Item Name]
   const match = fullText.match(/^([\d\.\/\s]+)?\s*([A-Za-z]+)?\s+(.*)$/);
 
   let qty = 1;
@@ -117,7 +106,7 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     } else if (unit === 'g' || unit === 'grams') {
       totalOz = qty / 28.3495;
     } else {
-      totalOz = qty * 4; // Default baseline ~4 oz per serving if unstated
+      totalOz = qty * 4;
     }
 
     baseGrams = Math.round(totalOz * 28.3495);
@@ -130,55 +119,62 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
   
   // --- RULE 2: GRAINS & DRY STAPLES (cups uncooked -> g) ---
   else if (category === 'Grains & Bakery' || /\b(rice|quinoa|oats|oatmeal|pasta|flour)\b/.test(lowerName)) {
-    if (unit === 'cup' || unit === 'cups' || unit === 'c') {
-      let density = 150; // Average default dry cup weight
-      if (lowerName.includes('rice')) density = DENSITY_CONVERSIONS.rice_cup;
-      else if (lowerName.includes('oat')) density = DENSITY_CONVERSIONS.oats_cup;
-      else if (lowerName.includes('quinoa')) density = DENSITY_CONVERSIONS.quinoa_cup;
-      else if (lowerName.includes('flour')) density = DENSITY_CONVERSIONS.flour_cup;
+    let cups = qty;
+    if (unit === 'tbsp' || unit === 'tablespoon' || unit === 'tablespoons') cups = qty / 16;
+    else if (unit === 'oz' || unit === 'ounce') cups = qty / 8;
+    else if (unit === 'g' || unit === 'grams') cups = qty / 150;
 
-      baseGrams = Math.round(qty * density);
-      const roundedCups = parseFloat(qty.toFixed(2));
-      primaryAmount = `${roundedCups} ${roundedCups === 1 ? 'cup' : 'cups'} (uncooked)`;
-      metricAmount = `${baseGrams} g`;
-    } else if (unit === 'g' || unit === 'grams') {
-      baseGrams = qty;
-      const cups = parseFloat((qty / 150).toFixed(2));
-      primaryAmount = `${cups} cups (uncooked)`;
-      metricAmount = `${Math.round(qty)} g`;
-    } else {
-      primaryAmount = `${qty} ${unit || 'serving'}`.trim();
-      metricAmount = `${Math.round(qty * 100)} g`;
-    }
+    let density = 150;
+    if (lowerName.includes('rice')) density = DENSITY_CONVERSIONS.rice_cup;
+    else if (lowerName.includes('oat')) density = DENSITY_CONVERSIONS.oats_cup;
+    else if (lowerName.includes('quinoa')) density = DENSITY_CONVERSIONS.quinoa_cup;
+    else if (lowerName.includes('flour')) density = DENSITY_CONVERSIONS.flour_cup;
+
+    baseGrams = Math.round(cups * density);
+    const roundedCups = parseFloat(cups.toFixed(2));
+    primaryAmount = `${roundedCups} ${roundedCups === 1 ? 'cup' : 'cups'} (uncooked)`;
+    metricAmount = `${baseGrams} g`;
   }
 
   // --- RULE 3: CANNED & PACKAGED GOODS (oz -> g) ---
   else if (/\b(can|canned|jar)\b/.test(lowerName) || unit === 'can' || unit === 'cans') {
-    const canOz = qty * 15; // Standard 15 oz can standard
+    const canOz = qty * 15;
     baseGrams = Math.round(canOz * 28.3495);
     primaryAmount = `${qty} can (${canOz} oz)`;
     metricAmount = `${baseGrams} g`;
   }
 
-  // --- RULE 4: LIQUIDS & OILS (tbsp / tsp / fl oz / cups -> ml) ---
-  else if (/\b(tbsp|tsp|tablespoon|teaspoon|cup|cups|fl oz|oz|ml|l)\b/.test(unit)) {
-    let ml = 0;
-    if (unit === 'tbsp' || unit === 'tablespoon' || unit === 'tablespoons') ml = qty * 14.7868;
-    else if (unit === 'tsp' || unit === 'teaspoon' || unit === 'teaspoons') ml = qty * 4.92892;
-    else if (unit === 'cup' || unit === 'cups' || unit === 'c') ml = qty * 240;
-    else if (unit === 'fl oz' || unit === 'oz') ml = qty * 29.5735;
-    else if (unit === 'ml') ml = qty;
+  // --- RULE 4: LIQUIDS, OILS & SPOON MEASURES (STEP-UP CASCADE: TBSP -> CUPS) ---
+  else if (/\b(tbsp|tsp|tablespoon|teaspoon|cup|cups|c|fl oz|oz|ml|l)\b/.test(unit)) {
+    let totalTbsp = 0;
 
-    const roundedMl = Math.round(ml);
-    const roundedQty = parseFloat(qty.toFixed(2));
-    primaryAmount = `${roundedQty} ${unit}`;
-    metricAmount = `${roundedMl} ml`;
+    if (unit === 'tsp' || unit === 'teaspoon' || unit === 'teaspoons') totalTbsp = qty / 3;
+    else if (unit === 'tbsp' || unit === 'tablespoon' || unit === 'tablespoons') totalTbsp = qty;
+    else if (unit === 'cup' || unit === 'cups' || unit === 'c') totalTbsp = qty * 16;
+    else if (unit === 'fl oz' || unit === 'oz') totalTbsp = qty * 2;
+    else if (unit === 'ml') totalTbsp = qty / 14.7868;
+
+    const totalMl = Math.round(totalTbsp * 14.7868);
+
+    // Step-up cascade: convert large tbsp totals into cups (e.g. 70 tbsp -> 4.38 cups)
+    if (totalTbsp >= 4) {
+      const cups = parseFloat((totalTbsp / 16).toFixed(2));
+      primaryAmount = `${cups} ${cups === 1 ? 'cup' : 'cups'}`;
+    } else if (totalTbsp < 1 && totalTbsp > 0) {
+      const tsp = parseFloat((totalTbsp * 3).toFixed(1));
+      primaryAmount = `${tsp} tsp`;
+    } else {
+      const roundedTbsp = parseFloat(totalTbsp.toFixed(1));
+      primaryAmount = `${roundedTbsp} tbsp`;
+    }
+
+    metricAmount = totalMl >= 1000 ? `${(totalMl / 1000).toFixed(2)} L` : `${totalMl} ml`;
   }
 
-  // --- RULE 5: PRODUCE / COUNT ITEMS (Count -> Estimated Grams) ---
+  // --- RULE 5: PRODUCE / COUNT ITEMS ---
   else {
     const roundedQty = parseFloat(qty.toFixed(2));
-    baseGrams = Math.round(qty * 100); // 100g average item estimate
+    baseGrams = Math.round(qty * 100);
     primaryAmount = unit ? `${roundedQty} ${unit}` : `${roundedQty} medium`;
     metricAmount = `approx. ${baseGrams} g`;
   }

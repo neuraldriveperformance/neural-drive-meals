@@ -124,6 +124,7 @@ export default function Home() {
     if (newVariety === 5) {
       setBulkPrep(false);
     } else if (newVariety < 3) {
+      setBulkPrep(true);
       setBatchSessions(1);
     }
   };
