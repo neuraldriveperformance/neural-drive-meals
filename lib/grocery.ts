@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { standardizeIngredient } from './units';
 
 export interface GroceryItem {
   id: string;
@@ -132,13 +133,16 @@ export function parseIngredientsToGroceryList(rawIngredients: any[]): GroceryIte
 
   map.forEach((val) => {
     const roundedQty = parseFloat(val.totalQuantity.toFixed(2));
-    const amountStr = val.unit ? `${roundedQty} ${val.unit}` : `${roundedQty}`;
+    const rawCombinedString = val.unit ? `${roundedQty} ${val.unit} ${val.originalName}` : `${roundedQty} ${val.originalName}`;
+
+    // Standardize total quantity & unit into Imperial + Metric dual format
+    const standardized = standardizeIngredient(rawCombinedString);
 
     items.push({
       id: `item-${index++}-${Date.now()}`,
       name: val.originalName,
       category: val.category,
-      amount: amountStr,
+      amount: standardized.dualDisplay,
       checked: false,
     });
   });
