@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { standardizeIngredient } from '@/lib/units';
 
 // Force Next.js to treat this route as dynamically rendered at request time
 export const dynamic = 'force-dynamic';
@@ -53,25 +54,32 @@ export async function POST(req: Request) {
       Lunch: 0.35,
       Dinner: 0.40,
       Snack: 0.15,
+      Snacks: 0.15,
     };
 
-    // --- HELPER: MATH PARSER & INGREDIENT SCALER ---
-    const scaleIngredientString = (ingredient: string, multiplier: number) => {
-      if (multiplier === 1) return ingredient;
+    // --- HELPER: MATH PARSER, SCALER & DUAL-UNIT FORMATTER ---
+    const scaleAndFormatIngredient = (ingredient: string, multiplier: number) => {
+      let scaledStr = ingredient;
 
-      return ingredient.replace(/^(\d+(?:\.\d+)?(?:\/\d+)?)/, (match) => {
-        let num = 0;
-        if (match.includes('/')) {
-          const [n, d] = match.split('/');
-          num = parseFloat(n) / parseFloat(d);
-        } else {
-          num = parseFloat(match);
-        }
-        const scaled = num * multiplier;
-        return Number.isInteger(scaled)
-          ? scaled.toString()
-          : parseFloat(scaled.toFixed(2)).toString();
-      });
+      if (multiplier !== 1) {
+        scaledStr = ingredient.replace(/^(\d+(?:\.\d+)?(?:\/\d+)?)/, (match) => {
+          let num = 0;
+          if (match.includes('/')) {
+            const [n, d] = match.split('/');
+            num = parseFloat(n) / parseFloat(d);
+          } else {
+            num = parseFloat(match);
+          }
+          const scaled = num * multiplier;
+          return Number.isInteger(scaled)
+            ? scaled.toString()
+            : parseFloat(scaled.toFixed(2)).toString();
+        });
+      }
+
+      // Convert into standardized "Imperial / Metric ItemName" format
+      const std = standardizeIngredient(scaledStr, 'recipe');
+      return `${std.dualDisplay} ${std.originalName}`;
     };
 
     // 1. EXCLUSION & DIETARY RESTRICTION LOGIC
@@ -93,8 +101,6 @@ export async function POST(req: Request) {
     const isKeto = exclusionsLower.some(
       (e) => e.includes('keto') || e.includes('low carb') || e.includes('low-carb')
     );
-    const isHalal = exclusionsLower.some((e) => e.includes('halal'));
-    const isKosher = exclusionsLower.some((e) => e.includes('kosher'));
 
     const meatTerms = [
       'beef', 'chicken', 'turkey', 'pork', 'salmon', 'fish', 'steak', 'meat',
@@ -117,7 +123,7 @@ export async function POST(req: Request) {
       const combinedMultiplier = calorieRatio * portionMultiplier;
 
       const scaledIngredients = (baseMeal.ingredients || []).map((ing: string) =>
-        scaleIngredientString(ing, combinedMultiplier)
+        scaleAndFormatIngredient(ing, combinedMultiplier)
       );
 
       const proteinCals = prot * 4;
@@ -161,7 +167,7 @@ export async function POST(req: Request) {
     };
 
     // MAP BUDGET LEVELS TO EXPLICIT CULINARY DIRECTIVES
-      const budgetGuidelines: Record<string, string> = {
+    const budgetGuidelines: Record<string, string> = {
       low: 'LOW BUDGET / ECONOMY & MINIMAL INGREDIENTS: Prioritize highly affordable, cost-effective staples and MAXIMIZE INGREDIENT OVERLAP across all recipes to keep shopping costs minimal. Standardize on 5-8 core ingredients across the entire week (e.g., bulk oats, eggs, canned black beans, rice, chicken thighs, frozen broccoli). Avoid introducing obscure or single-recipe spices/produce.',
       moderate: 'MODERATE BUDGET / STANDARD: Balanced approach with accessible whole foods, standard lean proteins (e.g., chicken breast, 93/7 ground beef, tofu, salmon fillets), fresh seasonal produce, and everyday grains.',
       high: 'HIGH BUDGET / PREMIUM: Gourmet/premium ingredients (e.g., ribeye steak, wild-caught salmon, organic produce, fresh berries, specialty cheeses, artisan grains, avocado, nuts, fresh herbs).',
@@ -174,6 +180,10 @@ export async function POST(req: Request) {
     const systemPrompt = `You are a world-class executive chef and sports nutritionist.
 Generate dynamic, highly varied recipe options strictly tailored to the client's budget level.
 
+MEASUREMENT & UNIT DIRECTIVES:
+- Always write ingredient quantities using standard US Imperial measurements (oz, lbs, cups, tbsp, tsp) rather than raw grams alone (e.g., "6 oz Chicken Breast", "1 cup Cooked Quinoa", "1 tbsp Olive Oil").
+- Do NOT write "170g Chicken Breast" — write "6 oz Chicken Breast" so our dual-unit converter formats it cleanly into Imperial / Metric.
+
 CREATIVE DIVERSITY INSTRUCTIONS:
 - Draw from an expansive global library of recipes and cuisines (e.g., Mediterranean, Asian, Latin, Middle Eastern, American, European).
 - Avoid defaulting to standard generic meal-prep staples (like plain chicken and rice) unless explicitly requested.
@@ -182,11 +192,17 @@ CREATIVE DIVERSITY INSTRUCTIONS:
 BUDGET TIER DIRECTIVE:
 ${activeBudgetInstruction}`;
 
-    const userPrompt = `Generate a pool of 6 Lunch recipes and 6 Dinner recipes for a client.
+    const userPrompt = `Generate a pool of 6 Lunch recipes and 6 Dinner recipes for a client (${clientName}).
 Client Calories: ${clientCalories} kcal | Protein Target: ${clientProtein}g
 Target Budget Level: ${String(budgetLevel).toUpperCase()}
+Max Prep Time: ${maxPrepTime}
 Dietary Restrictions / Exclusions to strictly follow: ${
       exclusionsLower.length > 0 ? exclusionsLower.join(', ') : 'None'
+    }
+Avoid repeating these recent recipes if possible: ${
+      Array.isArray(recipeHistory) && recipeHistory.length > 0
+        ? recipeHistory.slice(-25).join(', ')
+        : 'None'
     }
 
 Return JSON with this exact shape:
@@ -198,7 +214,7 @@ Return JSON with this exact shape:
       "protein": 45,
       "carbs": 50,
       "fat": 15,
-      "ingredients": ["1 cup ingredient", "1 tbsp seasoning"],
+      "ingredients": ["6 oz Chicken Breast", "1 cup Cooked Quinoa", "1 tbsp Olive Oil"],
       "instructions": ["Step 1..."],
       "familyFriendlyNote": "Optional note"
     }
@@ -210,7 +226,7 @@ Return JSON with this exact shape:
       "protein": 50,
       "carbs": 60,
       "fat": 18,
-      "ingredients": ["1 cup ingredient", "1 tbsp seasoning"],
+      "ingredients": ["6 oz Salmon Fillet", "1 cup Steamed Broccoli", "1 tbsp Lemon Juice"],
       "instructions": ["Step 1..."],
       "familyFriendlyNote": "Optional note"
     }
@@ -242,7 +258,7 @@ Return JSON with this exact shape:
         name: 'Custom Macro Bowl',
         calories: swapTarget.targetCalories || 650,
         protein: swapTarget.targetProtein || 45,
-        ingredients: ['1 serving balanced ingredients'],
+        ingredients: ['6 oz Grilled Chicken Breast', '1 cup Cooked Quinoa', '1 cup Mixed Greens'],
       };
 
       const swappedMeal = createScaledMeal(
@@ -511,7 +527,7 @@ Return JSON with this exact shape:
       ([category, itemsMap]) =>
         Array.from(itemsMap.entries()).map(([item, count]) => ({
           category,
-          item: effectiveBulkPrep ? item : scaleIngredientString(item, count),
+          item: effectiveBulkPrep ? item : scaleAndFormatIngredient(item, count),
         }))
     );
 

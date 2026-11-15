@@ -53,14 +53,13 @@ export function convertCookedGrainToDry(rawText: string, qty: number): number {
   const lower = rawText.toLowerCase();
   if (!isGrainItem(lower)) return qty;
 
-  // Only convert if explicitly marked "cooked" and NOT "uncooked"
   if (/\bcooked\b/i.test(lower) && !/\buncooked\b/i.test(lower)) {
     for (const [grain, ratio] of Object.entries(COOKED_TO_DRY_RATIO)) {
       if (lower.includes(grain)) {
         return qty / ratio;
       }
     }
-    return qty / 2.5; // Default grain expansion factor
+    return qty / 2.5;
   }
 
   return qty;
@@ -90,7 +89,6 @@ export function normalizeIngredientName(rawName: string): string {
   // Strip parenthetical notes like "(uncooked)", "(cooked)", "(boneless, skinless)"
   name = name.replace(/\([^)]*\)/g, '');
 
-  // Strip preparation and state modifiers
   const modifiers = [
     'cooked', 'uncooked', 'raw', 'dry', 'dried',
     'grilled', 'baked', 'roasted', 'pan-seared', 'seared', 'sauteed', 'sautéed',
@@ -134,7 +132,15 @@ function parseQuantity(rawQty: string): number {
   return total || 1;
 }
 
-export function standardizeIngredient(rawInput: string | any): FormattedIngredient {
+/**
+ * Standardizes an ingredient into Imperial / Metric dual format.
+ * - mode = 'recipe': Preserves recipe-level ingredient names and cooked/uncooked volumes while enforcing dual units.
+ * - mode = 'grocery': Converts cooked grain volumes to dry uncooked equivalents and normalizes prep modifiers.
+ */
+export function standardizeIngredient(
+  rawInput: string | any,
+  mode: 'recipe' | 'grocery' = 'recipe'
+): FormattedIngredient {
   let rawStr = '';
   let explicitAmount = '';
 
@@ -142,10 +148,44 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     rawStr = rawInput.trim();
   } else if (rawInput && typeof rawInput === 'object') {
     rawStr = (rawInput.item || rawInput.name || '').trim();
-    explicitAmount = rawInput.amount || rawInput.quantity || '';
+    explicitAmount = (rawInput.amount || rawInput.quantity || '').toString().trim();
+  }
+
+  // If explicitAmount is already formatted as dual-unit ("Imperial / Metric"), preserve it cleanly
+  if (explicitAmount.includes('/')) {
+    const [primaryPart, metricPart] = explicitAmount.split('/').map((s) => s.trim());
+    const normalizedName = normalizeIngredientName(rawStr);
+    return {
+      originalName: rawStr,
+      normalizedName,
+      category: determineCategory(normalizedName),
+      primaryAmount: primaryPart,
+      metricAmount: metricPart,
+      dualDisplay: `${primaryPart} / ${metricPart}`,
+    };
+  }
+
+  // Handle string inputs that already contain a dual-unit prefix (e.g. "6 oz / 170 g Grilled Chicken Breast")
+  const dualPrefixMatch = rawStr.match(
+    /^([\d\.]+(?:\s+lbs?\s*\(\d+\s*oz\)|\s*(?:oz|lbs?|cups?(?:\s*\(uncooked\))?|tbsp|tsp|can\s*\(\d+\s*oz\)|medium|[A-Za-z]+))\s*\/\s*(?:approx\.\s*)?[\d\.]+\s*(?:g|kg|ml|L))\s+(.*)$/i
+  );
+  if (dualPrefixMatch) {
+    const dualStr = dualPrefixMatch[1].trim();
+    const itemOnly = dualPrefixMatch[2].trim();
+    const [primaryPart, metricPart] = dualStr.split('/').map((s) => s.trim());
+    const normalizedName = normalizeIngredientName(itemOnly);
+    return {
+      originalName: itemOnly,
+      normalizedName,
+      category: determineCategory(normalizedName),
+      primaryAmount: primaryPart,
+      metricAmount: metricPart,
+      dualDisplay: dualStr,
+    };
   }
 
   const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
+  // Matches attached or spaced units (e.g. "170g Chicken Breast" or "6 oz Chicken Breast")
   const match = fullText.match(/^([\d\.\/\s]+)?\s*([A-Za-z]+)?\s+(.*)$/);
 
   let qty = 1;
@@ -158,8 +198,9 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     if (match[3]) itemName = match[3].trim();
   }
 
-  // Convert cooked grain qty to dry BEFORE normalizeIngredientName strips "cooked"
-  qty = convertCookedGrainToDry(fullText, qty);
+  if (mode === 'grocery') {
+    qty = convertCookedGrainToDry(fullText, qty);
+  }
 
   const normalizedName = normalizeIngredientName(itemName);
   const category = determineCategory(normalizedName);
@@ -169,33 +210,35 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
   let metricAmount = '';
   let baseGrams = 0;
 
-  // --- RULE 1: MEAT & POULTRY (lbs / oz -> g / kg) ---
+  // --- RULE 1: MEAT & POULTRY (oz / lbs <-> g / kg) ---
   if (category === 'Meat & Seafood') {
     let totalOz = 0;
     if (unit === 'lb' || unit === 'lbs' || unit === 'pound' || unit === 'pounds') {
       totalOz = qty * 16;
     } else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') {
       totalOz = qty;
-    } else if (unit === 'g' || unit === 'grams') {
+    } else if (unit === 'g' || unit === 'gram' || unit === 'grams') {
       totalOz = qty / 28.3495;
+    } else if (unit === 'kg' || unit === 'kilogram' || unit === 'kilograms') {
+      totalOz = (qty * 1000) / 28.3495;
     } else {
       totalOz = qty * 4;
     }
 
-    baseGrams = Math.round(totalOz * 28.3495);
+    baseGrams = unit === 'g' || unit === 'grams' ? Math.round(qty) : Math.round(totalOz * 28.3495);
     const lbs = parseFloat((totalOz / 16).toFixed(2));
-    const roundedOz = Math.round(totalOz);
+    const roundedOz = parseFloat(totalOz.toFixed(1));
 
-    primaryAmount = lbs >= 1 ? `${lbs} lbs (${roundedOz} oz)` : `${roundedOz} oz`;
+    primaryAmount = lbs >= 1 ? `${lbs} lbs (${Math.round(totalOz)} oz)` : `${roundedOz} oz`;
     metricAmount = baseGrams >= 1000 ? `${(baseGrams / 1000).toFixed(2)} kg` : `${baseGrams} g`;
   }
 
-  // --- RULE 2: GRAINS & DRY STAPLES (Always measured & labeled Uncooked) ---
+  // --- RULE 2: GRAINS & DRY STAPLES ---
   else if (isGrainItem(lowerName)) {
     let cups = qty;
     if (unit === 'tbsp' || unit === 'tablespoon' || unit === 'tablespoons') cups = qty / 16;
-    else if (unit === 'oz' || unit === 'ounce') cups = qty / 8;
-    else if (unit === 'g' || unit === 'grams') cups = qty / 150;
+    else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') cups = qty / 8;
+    else if (unit === 'g' || unit === 'gram' || unit === 'grams') cups = qty / 170;
 
     let density = 160;
     if (lowerName.includes('rice')) density = DENSITY_CONVERSIONS.rice_cup;
@@ -204,9 +247,10 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     else if (lowerName.includes('pasta')) density = DENSITY_CONVERSIONS.pasta_cup;
     else if (lowerName.includes('barley')) density = DENSITY_CONVERSIONS.barley_cup;
 
-    baseGrams = Math.round(cups * density);
+    baseGrams = unit === 'g' || unit === 'grams' ? Math.round(qty) : Math.round(cups * density);
     const roundedCups = parseFloat(cups.toFixed(2));
-    primaryAmount = `${roundedCups} ${roundedCups === 1 ? 'cup' : 'cups'} (uncooked)`;
+    const stateTag = mode === 'grocery' ? ' (uncooked)' : '';
+    primaryAmount = `${roundedCups} ${roundedCups === 1 ? 'cup' : 'cups'}${stateTag}`;
     metricAmount = `${baseGrams} g`;
   }
 
@@ -219,7 +263,7 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
   }
 
   // --- RULE 4: LIQUIDS, OILS & SPOON MEASURES (STEP-UP CASCADE) ---
-  else if (/\b(tbsp|tsp|tablespoon|teaspoon|cup|cups|c|fl oz|oz|ml|l)\b/.test(unit)) {
+  else if (/\b(tbsp|tsp|tablespoon|tablespoons|teaspoon|teaspoons|cup|cups|c|fl oz|oz|ml|l)\b/.test(unit)) {
     let totalTbsp = 0;
 
     if (unit === 'tsp' || unit === 'teaspoon' || unit === 'teaspoons') totalTbsp = qty / 3;
@@ -227,8 +271,9 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     else if (unit === 'cup' || unit === 'cups' || unit === 'c') totalTbsp = qty * 16;
     else if (unit === 'fl oz' || unit === 'oz') totalTbsp = qty * 2;
     else if (unit === 'ml') totalTbsp = qty / 14.7868;
+    else if (unit === 'l') totalTbsp = (qty * 1000) / 14.7868;
 
-    const totalMl = Math.round(totalTbsp * 14.7868);
+    const totalMl = unit === 'ml' ? Math.round(qty) : Math.round(totalTbsp * 14.7868);
 
     if (totalTbsp >= 4) {
       const cups = parseFloat((totalTbsp / 16).toFixed(2));
@@ -244,7 +289,15 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     metricAmount = totalMl >= 1000 ? `${(totalMl / 1000).toFixed(2)} L` : `${totalMl} ml`;
   }
 
-  // --- RULE 5: PRODUCE / COUNT ITEMS ---
+  // --- RULE 5: PURE WEIGHTS FOR PRODUCE/DAIRY/PANTRY (e.g. "150g Greek Yogurt" or "200g Spinach") ---
+  else if (unit === 'g' || unit === 'gram' || unit === 'grams') {
+    baseGrams = Math.round(qty);
+    const oz = parseFloat((qty / 28.3495).toFixed(1));
+    primaryAmount = `${oz} oz`;
+    metricAmount = `${baseGrams} g`;
+  }
+
+  // --- RULE 6: PRODUCE / COUNT ITEMS ---
   else {
     const roundedQty = parseFloat(qty.toFixed(2));
     baseGrams = Math.round(qty * 100);

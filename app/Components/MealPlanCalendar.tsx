@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getSavedRecipes, saveRecipe, unsaveRecipe } from '@/lib/recipes';
+import { standardizeIngredient } from '@/lib/units';
 
 export interface Meal {
   type: string;
@@ -27,7 +28,7 @@ export interface DayPlan {
 interface MealPlanCalendarProps {
   calendarDays: any[];
   onSwapMeal?: (day: string, type: string) => void;
-  onSelectMeal?: (meal: Meal) => void; // FIX 1: Added missing prop definition
+  onSelectMeal?: (meal: Meal) => void;
   isModal?: boolean;
 }
 
@@ -38,6 +39,18 @@ const MEAL_ORDER: { [key: string]: number } = {
   Snacks: 4,
   Snack: 4,
 };
+
+/**
+ * Formats any recipe ingredient (string or object) into standardized
+ * "Imperial / Metric ItemName" display while preserving recipe-level context.
+ */
+function formatRecipeIngredientLine(ing: string | any): string {
+  if (typeof ing === 'string' && ing.toLowerCase().includes('self-provided')) {
+    return ing;
+  }
+  const std = standardizeIngredient(ing, 'recipe');
+  return `${std.dualDisplay} ${std.originalName}`;
+}
 
 export default function MealPlanCalendar({
   calendarDays,
@@ -101,7 +114,7 @@ export default function MealPlanCalendar({
 
   const handleShareRecipe = (meal: Meal) => {
     const ingredientsText = (meal.ingredients || [])
-      .map((i: string | any) => (typeof i === 'string' ? `• ${i}` : `• ${i.item || i.name} (${i.amount || ''})`))
+      .map((i: string | any) => `• ${formatRecipeIngredientLine(i)}`)
       .join('\n');
 
     const text = `🍽️ ${meal.name} (${meal.type})
@@ -125,9 +138,11 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
     if (!printWindow) return;
 
     const ingredientsList = (meal.ingredients || [])
-      .map((i: string | any) => `<li>${typeof i === 'string' ? i : `${i.item || i.name} (${i.amount || ''})`}</li>`)
+      .map((i: string | any) => `<li>${formatRecipeIngredientLine(i)}</li>`)
       .join('');
-    const instructionsList = (meal.instructions || []).map((inst) => `<li>${inst}</li>`).join('');
+    const instructionsList = (meal.instructions || [])
+      .map((inst) => `<li>${inst}</li>`)
+      .join('');
 
     printWindow.document.write(`
       <html>
@@ -237,7 +252,7 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                         ) : null}
                       </div>
 
-                      {/* FIX 3: CONDITIONAL UNCOMPRESSED MEAL TITLE */}
+                      {/* UNCOMPRESSED MEAL TITLE */}
                       <div
                         className={`font-bold text-white text-xs leading-snug ${
                           isModal
@@ -294,12 +309,9 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                               Ingredients:
                             </strong>
                             <ul className="list-disc pl-3 space-y-0.5">
-                              {/* FIX 2: EXPLICIT TYPE FOR ING PARAMETER */}
                               {meal.ingredients?.map((ing: string | any, iIdx: number) => (
                                 <li key={iIdx} className="whitespace-normal break-words">
-                                  {typeof ing === 'string'
-                                    ? ing
-                                    : `${ing.item || ing.name} (${ing.amount || ''})`}
+                                  {formatRecipeIngredientLine(ing)}
                                 </li>
                               ))}
                             </ul>
