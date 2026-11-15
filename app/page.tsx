@@ -451,11 +451,28 @@ export default function Home() {
 
         setWeeklyCalendar(updatedCalendar);
 
-        // Rebuild & sync grocery checklist for the updated calendar
+        // Rebuild & sync grocery checklist + overwrite saved_plans in Supabase
         const taggedIngredients = extractTaggedIngredients(updatedCalendar);
         const updatedGroceryItems = parseIngredientsToGroceryList(taggedIngredients, activeBulkPrep);
 
         if (activePlanId && activePlanId !== 'active-plan') {
+          const { error: planUpdateError } = await supabase
+            .from('saved_plans')
+            .update({
+              plan_data: {
+                calendar: updatedCalendar,
+                estimatedCost,
+                household,
+                portionWeight: totalPortionWeight,
+                budgetLevel: budget,
+              },
+            })
+            .eq('id', activePlanId);
+
+          if (planUpdateError) {
+            console.error('Failed to sync swapped meal to saved_plans:', planUpdateError);
+          }
+
           const creationDateStr = new Date().toLocaleDateString(undefined, {
             month: 'short',
             day: 'numeric',
