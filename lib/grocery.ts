@@ -4,6 +4,7 @@ import {
   standardizeIngredient,
   normalizeIngredientName,
   determineCategory,
+  convertCookedGrainToDry,
 } from '@/lib/units';
 
 export interface GroceryItem {
@@ -83,6 +84,10 @@ export function parseIngredientsToGroceryList(
         qty = parseFloat(rawQty);
       }
     }
+
+    // Convert cooked grain quantities (e.g., "1.5 cups cooked quinoa") to dry uncooked equivalent
+    // BEFORE normalizing the name into "Quinoa (Uncooked)"
+    qty = convertCookedGrainToDry(fullText, qty);
 
     // Normalizes prep words ("Grilled Chicken Breast" -> "Chicken Breast")
     // while keeping grains labeled ("Brown Rice (Uncooked)")

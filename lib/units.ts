@@ -22,10 +22,48 @@ const DENSITY_CONVERSIONS: Record<string, number> = {
   oil_tbsp: 14,
 };
 
+// Expansion ratios (Cooked Volume -> Dry Uncooked Volume)
+const COOKED_TO_DRY_RATIO: Record<string, number> = {
+  quinoa: 3.0,   // 1 cup dry quinoa yields ~3 cups cooked
+  rice: 2.5,     // 1 cup dry rice yields ~2.5 cups cooked
+  barley: 2.5,
+  farro: 2.5,
+  couscous: 2.5,
+  bulgur: 2.5,
+  lentils: 2.5,
+  oats: 2.0,     // 1 cup dry oats yields ~2 cups cooked
+  oatmeal: 2.0,
+  pasta: 2.0,    // 1 cup dry pasta yields ~2 cups cooked
+  spaghetti: 2.0,
+  penne: 2.0,
+  macaroni: 2.0,
+};
+
 const GRAIN_REGEX = /\b(rice|oats|oatmeal|quinoa|pasta|spaghetti|penne|macaroni|barley|farro|couscous|bulgur|grits|polenta|lentils)\b/i;
 
 export function isGrainItem(name: string): boolean {
   return GRAIN_REGEX.test(name.toLowerCase());
+}
+
+/**
+ * Converts a cooked grain quantity back to its raw dry uncooked equivalent
+ * BEFORE name normalization strips the "cooked" modifier.
+ */
+export function convertCookedGrainToDry(rawText: string, qty: number): number {
+  const lower = rawText.toLowerCase();
+  if (!isGrainItem(lower)) return qty;
+
+  // Only convert if explicitly marked "cooked" and NOT "uncooked"
+  if (/\bcooked\b/i.test(lower) && !/\buncooked\b/i.test(lower)) {
+    for (const [grain, ratio] of Object.entries(COOKED_TO_DRY_RATIO)) {
+      if (lower.includes(grain)) {
+        return qty / ratio;
+      }
+    }
+    return qty / 2.5; // Default grain expansion factor
+  }
+
+  return qty;
 }
 
 export function determineCategory(name: string): string {
@@ -64,14 +102,12 @@ export function normalizeIngredientName(rawName: string): string {
   ];
 
   const modifierPattern = new RegExp(`\\b(${modifiers.join('|')})\\b`, 'gi');
-  name = name.replace(/,\s*.*$/, ''); // Strip trailing comma clauses (e.g., ", diced")
+  name = name.replace(/,\s*.*$/, '');
   name = name.replace(modifierPattern, '');
   name = name.replace(/\s+/g, ' ').trim();
 
-  // Title Case
   const titleCased = name.replace(/\b\w/g, (char) => char.toUpperCase());
 
-  // CAVEAT: Protect grains so they explicitly remain labeled as (Uncooked)
   if (isGrainItem(titleCased)) {
     return `${titleCased} (Uncooked)`;
   }
@@ -122,6 +158,9 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     if (match[3]) itemName = match[3].trim();
   }
 
+  // Convert cooked grain qty to dry BEFORE normalizeIngredientName strips "cooked"
+  qty = convertCookedGrainToDry(fullText, qty);
+
   const normalizedName = normalizeIngredientName(itemName);
   const category = determineCategory(normalizedName);
   const lowerName = normalizedName.toLowerCase();
@@ -157,11 +196,6 @@ export function standardizeIngredient(rawInput: string | any): FormattedIngredie
     if (unit === 'tbsp' || unit === 'tablespoon' || unit === 'tablespoons') cups = qty / 16;
     else if (unit === 'oz' || unit === 'ounce') cups = qty / 8;
     else if (unit === 'g' || unit === 'grams') cups = qty / 150;
-
-    // If recipe listed cooked cups (typically ~2.5x volume of dry), adjust back to dry uncooked ratio
-    if (/\bcooked\b/i.test(rawStr) && !/\buncooked\b/i.test(rawStr)) {
-      cups = cups / 2.5;
-    }
 
     let density = 160;
     if (lowerName.includes('rice')) density = DENSITY_CONVERSIONS.rice_cup;
