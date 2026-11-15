@@ -216,27 +216,47 @@ export default function Home() {
         ? `${clientName}'s Plan (${creationDateStr})`
         : `Weekly Meal Plan (${creationDateStr})`;
 
-      const { data: insertedPlan, error: planError } = await supabase
-        .from('saved_plans')
-        .insert({
-          user_id: user.id,
-          title: planTitle,
-          plan_data: {
-            calendar: weeklyCalendar,
-            estimatedCost,
-            household,
-            portionWeight: totalPortionWeight,
-            budgetLevel: budget,
-          },
-          created_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
+      const planPayload = {
+        calendar: weeklyCalendar,
+        estimatedCost,
+        household,
+        portionWeight: totalPortionWeight,
+        budgetLevel: budget,
+      };
 
-      if (planError) throw planError;
+      let targetPlanId = activePlanId;
 
-      const targetPlanId = insertedPlan.id;
-      setActivePlanId(targetPlanId);
+      if (activePlanId && activePlanId !== 'active-plan') {
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('saved_plans')
+          .update({
+            title: planTitle,
+            plan_data: planPayload,
+          })
+          .eq('id', activePlanId)
+          .eq('user_id', user.id)
+          .select('id');
+
+        if (updateError) throw updateError;
+        if (!updatedRows || updatedRows.length === 0) {
+          throw new Error('Could not overwrite plan. Verify UPDATE RLS policy on saved_plans.');
+        }
+      } else {
+        const { data: insertedPlan, error: planError } = await supabase
+          .from('saved_plans')
+          .insert({
+            user_id: user.id,
+            title: planTitle,
+            plan_data: planPayload,
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (planError) throw planError;
+        targetPlanId = insertedPlan.id;
+        setActivePlanId(targetPlanId);
+      }
 
       const activeBulkPrep = variety === 5 ? false : bulkPrep;
       const taggedIngredients = extractTaggedIngredients(weeklyCalendar);
@@ -451,28 +471,12 @@ export default function Home() {
 
         setWeeklyCalendar(updatedCalendar);
 
-        // Rebuild & sync grocery checklist + overwrite saved_plans in Supabase
+        // Automatically overwrite the saved meal plan & grocery checklist in Supabase
         const taggedIngredients = extractTaggedIngredients(updatedCalendar);
         const updatedGroceryItems = parseIngredientsToGroceryList(taggedIngredients, activeBulkPrep);
 
-        if (activePlanId && activePlanId !== 'active-plan') {
-          const { error: planUpdateError } = await supabase
-            .from('saved_plans')
-            .update({
-              plan_data: {
-                calendar: updatedCalendar,
-                estimatedCost,
-                household,
-                portionWeight: totalPortionWeight,
-                budgetLevel: budget,
-              },
-            })
-            .eq('id', activePlanId);
-
-          if (planUpdateError) {
-            console.error('Failed to sync swapped meal to saved_plans:', planUpdateError);
-          }
-
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
           const creationDateStr = new Date().toLocaleDateString(undefined, {
             month: 'short',
             day: 'numeric',
@@ -482,7 +486,30 @@ export default function Home() {
             ? `${clientName}'s Grocery List (${creationDateStr})`
             : `Grocery List (${creationDateStr})`;
 
-          await saveGroceryChecklist(activePlanId, updatedGroceryItems, checklistTitle);
+          const updatedPlanPayload = {
+            calendar: updatedCalendar,
+            estimatedCost,
+            household,
+            portionWeight: totalPortionWeight,
+            budgetLevel: budget,
+          };
+
+          if (activePlanId && activePlanId !== 'active-plan') {
+            const { data: updatedRows, error: planUpdateError } = await supabase
+              .from('saved_plans')
+              .update({ plan_data: updatedPlanPayload })
+              .eq('id', activePlanId)
+              .eq('user_id', user.id)
+              .select('id');
+
+            if (planUpdateError || !updatedRows || updatedRows.length === 0) {
+              console.error('Failed to auto-overwrite saved_plans on swap:', planUpdateError);
+              setSavePlanMessage('Swap updated locally, but Supabase UPDATE policy blocked overwrite.');
+            } else {
+              await saveGroceryChecklist(activePlanId, updatedGroceryItems, checklistTitle);
+              setSavePlanMessage(`Auto-updated saved plan & grocery list with "${replacementMeal.name}"!`);
+            }
+          }
         }
 
         // Force GroceryChecklist component to re-render with updated ingredients
