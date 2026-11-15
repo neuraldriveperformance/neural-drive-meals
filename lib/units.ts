@@ -63,23 +63,27 @@ export function stripDualUnitString(rawText: string): string {
 }
 
 /**
- * Converts a cooked grain quantity back to its raw dry uncooked equivalent
- * BEFORE name normalization strips the "cooked" modifier.
+ * Converts a recipe grain quantity back to its raw dry uncooked equivalent
+ * BEFORE name normalization strips modifiers. Defaults meal grains to cooked
+ * unless explicitly labeled dry/uncooked/raw (or oats/flour).
  */
 export function convertCookedGrainToDry(rawText: string, qty: number): number {
   const lower = rawText.toLowerCase();
   if (!isGrainItem(lower)) return qty;
 
-  if (/\bcooked\b/i.test(lower) && !/\buncooked\b/i.test(lower)) {
-    for (const [grain, ratio] of Object.entries(COOKED_TO_DRY_RATIO)) {
-      if (lower.includes(grain)) {
-        return qty / ratio;
-      }
-    }
-    return qty / 2.5;
-  }
+  // If explicitly marked dry/uncooked/raw, do not divide
+  if (/\b(uncooked|dry|raw)\b/i.test(lower)) return qty;
 
-  return qty;
+  // Oats in overnight oats/smoothies are typically measured dry unless labeled cooked
+  const isTypicallyDryInRecipe = /\b(oats|oatmeal|flour)\b/i.test(lower) && !/\bcooked\b/i.test(lower);
+  if (isTypicallyDryInRecipe) return qty;
+
+  for (const [grain, ratio] of Object.entries(COOKED_TO_DRY_RATIO)) {
+    if (lower.includes(grain)) {
+      return qty / ratio;
+    }
+  }
+  return qty / 2.5;
 }
 
 export function determineCategory(name: string): string {

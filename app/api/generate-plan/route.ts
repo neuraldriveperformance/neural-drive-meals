@@ -182,6 +182,7 @@ Generate dynamic, highly varied recipe options strictly tailored to the client's
 
 MEASUREMENT & UNIT DIRECTIVES:
 - Always write ingredient quantities using standard US Imperial measurements (oz, lbs, cups, tbsp, tsp) rather than raw grams alone (e.g., "6 oz Chicken Breast", "1 cup Cooked Quinoa", "1 tbsp Olive Oil").
+- Always explicitly state "Cooked" for prepared grains in recipes (e.g., "1 cup Cooked Brown Rice", "1 cup Cooked Quinoa", "1 cup Cooked Farro") unless the recipe literally uses raw oats/grains.
 - Do NOT write "170g Chicken Breast" — write "6 oz Chicken Breast" so our dual-unit converter formats it cleanly into Imperial / Metric.
 
 CREATIVE DIVERSITY INSTRUCTIONS:
