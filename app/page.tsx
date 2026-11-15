@@ -63,6 +63,7 @@ export default function Home() {
   const [recipeHistory, setRecipeHistory] = useState<string[]>([]);
   const [weeklyCalendar, setWeeklyCalendar] = useState<any[] | null>(null);
   const [activePlanId, setActivePlanId] = useState<string>('active-plan');
+  const [checklistVersion, setChecklistVersion] = useState<number>(0);
   const [estimatedCost, setEstimatedCost] = useState('');
 
   // 4. Schedule Matrix State
@@ -245,6 +246,7 @@ export default function Home() {
         : `Grocery List (${creationDateStr})`;
 
       await saveGroceryChecklist(targetPlanId, parsedGroceryItems, checklistTitle);
+      setChecklistVersion((v) => v + 1);
 
       setSavePlanMessage('Successfully saved plan & linked grocery list!');
     } catch (err: any) {
@@ -295,6 +297,7 @@ export default function Home() {
       const generatedCalendar = data.weeklyCalendar || [];
       setWeeklyCalendar(generatedCalendar);
       setEstimatedCost(data.estimatedGroceryCost || `$120 – $220 USD`);
+      setChecklistVersion((v) => v + 1);
 
       // AUTO-SAVE TO SUPABASE IMMEDIATELY AFTER GENERATION
       const { data: { user } } = await supabase.auth.getUser();
@@ -337,6 +340,7 @@ export default function Home() {
             : `Grocery List (${creationDateStr})`;
 
           await saveGroceryChecklist(targetPlanId, parsedGroceryItems, checklistTitle);
+          setChecklistVersion((v) => v + 1);
           setSavePlanMessage('Auto-saved plan & linked grocery list to your dashboard!');
         }
         setSavingPlan(false);
@@ -371,6 +375,16 @@ export default function Home() {
       const targetMeal = targetDayPlan?.meals?.find((m: any) => m.type === mealTypeToSwap);
       const oldMealName = targetMeal?.name;
 
+      // Count how many times this batch meal appears in the current week
+      let occurrences = 1;
+      if (weeklyCalendar && oldMealName) {
+        const count = weeklyCalendar.reduce((acc: number, dayObj: any) => {
+          const matches = (dayObj.meals || []).filter((m: any) => m.name === oldMealName).length;
+          return acc + matches;
+        }, 0);
+        if (count > 0) occurrences = count;
+      }
+
       const currentCalendarMeals: string[] = [];
       weeklyCalendar?.forEach((dayObj: any) => {
         dayObj.meals?.forEach((m: any) => {
@@ -402,7 +416,13 @@ export default function Home() {
           recipeHistory: combinedExclusions,
           seed: `${Date.now()}-${Math.random()}`,
           isSwapRequest: true,
-          swapTarget: { day: dayToSwap, type: mealTypeToSwap },
+          swapTarget: {
+            day: dayToSwap,
+            type: mealTypeToSwap,
+            occurrences,
+            targetCalories: targetMeal?.calories,
+            targetProtein: targetMeal?.protein,
+          },
         }),
       });
 
@@ -429,7 +449,27 @@ export default function Home() {
           return { ...dayObj, meals: updatedMeals };
         });
 
-        setWeeklyCalendar([...updatedCalendar]);
+        setWeeklyCalendar(updatedCalendar);
+
+        // Rebuild & sync grocery checklist for the updated calendar
+        const taggedIngredients = extractTaggedIngredients(updatedCalendar);
+        const updatedGroceryItems = parseIngredientsToGroceryList(taggedIngredients, activeBulkPrep);
+
+        if (activePlanId && activePlanId !== 'active-plan') {
+          const creationDateStr = new Date().toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          });
+          const checklistTitle = clientName
+            ? `${clientName}'s Grocery List (${creationDateStr})`
+            : `Grocery List (${creationDateStr})`;
+
+          await saveGroceryChecklist(activePlanId, updatedGroceryItems, checklistTitle);
+        }
+
+        // Force GroceryChecklist component to re-render with updated ingredients
+        setChecklistVersion((v) => v + 1);
 
         if (replacementMeal.name) {
           const updatedHistory = Array.from(
@@ -871,7 +911,7 @@ export default function Home() {
                 className="w-4 h-4 rounded border-[#1E2D4A] bg-[#0F1724] text-[#00F2FE] focus:ring-0 cursor-pointer"
               />
               <span className="text-xs text-gray-400 leading-snug">
-                I understand that NeuralDrive Performance provides non-medical nutrition guidelines. 
+                I understand that NeuralDrive Performance provides non-medical nutrition guidelines.
                 Consult with a qualified healthcare provider before altering your dietary regimen.
               </span>
             </label>
@@ -937,6 +977,7 @@ export default function Home() {
             />
 
             <GroceryChecklist
+              key={`${activePlanId}-${checklistVersion}`}
               planId={activePlanId}
               planTitle={clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List'}
               rawIngredients={extractTaggedIngredients(weeklyCalendar)}

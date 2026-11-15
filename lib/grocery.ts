@@ -5,6 +5,7 @@ import {
   normalizeIngredientName,
   determineCategory,
   convertCookedGrainToDry,
+  stripDualUnitString,
 } from '@/lib/units';
 
 export interface GroceryItem {
@@ -31,9 +32,6 @@ const getSupabase = () =>
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-/**
- * Cross-recipe ingredient aggregation & strict bulk-prep deduplication parser
- */
 export function parseIngredientsToGroceryList(
   rawIngredients: any[],
   enableBulkPrep: boolean = false
@@ -55,16 +53,16 @@ export function parseIngredientsToGroceryList(
     let recipeName = '';
 
     if (typeof ing === 'string') {
-      rawStr = ing.trim();
+      rawStr = stripDualUnitString(ing.trim());
     } else if (ing && typeof ing === 'object') {
-      rawStr = (ing.item || ing.name || '').trim();
-      explicitAmount = ing.amount || ing.quantity || '';
+      rawStr = stripDualUnitString((ing.item || ing.name || '').trim());
+      const rawAmt = (ing.amount || ing.quantity || '').toString().trim();
+      explicitAmount = rawAmt.includes('/') ? rawAmt.split('/')[0].trim() : rawAmt;
       recipeName = (ing.recipeName || ing.mealName || '').trim().toLowerCase();
     }
 
-    if (!rawStr || rawStr.includes('Self-provided')) return;
+    if (!rawStr || rawStr.toLowerCase().includes('self-provided')) return;
 
-    // Combine quantity & name
     const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
     const match = fullText.match(/^([\d\.\/]+)\s*([A-Za-z]+)?\s+(.*)$/);
 
@@ -85,12 +83,9 @@ export function parseIngredientsToGroceryList(
       }
     }
 
-    // Convert cooked grain quantities (e.g., "1.5 cups cooked quinoa") to dry uncooked equivalent
-    // BEFORE normalizing the name into "Quinoa (Uncooked)"
+    // Convert cooked grain quantities (e.g., "2.8 cups Cooked Farro") to dry uncooked equivalent
     qty = convertCookedGrainToDry(fullText, qty);
 
-    // Normalizes prep words ("Grilled Chicken Breast" -> "Chicken Breast")
-    // while keeping grains labeled ("Brown Rice (Uncooked)")
     const normalized = normalizeIngredientName(rawItemName);
     const category = determineCategory(normalized);
     const key = normalized;
@@ -107,9 +102,6 @@ export function parseIngredientsToGroceryList(
 
     const entry = map.get(key)!;
 
-    // STRICT BULK-PREP FLAT-CAPPING:
-    // If bulk prep is ON and this exact recipe was already counted for this ingredient,
-    // skip adding it again so 3 days of a batch meal = 1x batch quantity instead of 3x.
     if (enableBulkPrep) {
       const recipeKey = recipeName || `anon-${normalized}`;
       if (entry.seenRecipes.has(recipeKey)) {
@@ -133,7 +125,8 @@ export function parseIngredientsToGroceryList(
       ? `${roundedQty} ${val.unit} ${val.originalName}`
       : `${roundedQty} ${val.originalName}`;
 
-    const standardized = standardizeIngredient(rawCombinedString);
+    // Pass 'grocery' mode so grains keep their "(uncooked)" unit label without re-dividing
+    const standardized = standardizeIngredient(rawCombinedString, 'grocery');
 
     items.push({
       id: `item-${index++}-${Date.now()}`,

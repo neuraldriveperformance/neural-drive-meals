@@ -250,7 +250,7 @@ Return JSON with this exact shape:
     const lunchPool = parsedPools.lunchPool || [];
     const dinnerPool = parsedPools.dinnerPool || [];
 
-    // SWAP HANDLER
+    // SWAP HANDLER (Preserves bulk-prep occurrences & household scaling)
     if (isSwapRequest && swapTarget) {
       const pool = swapTarget.type === 'Lunch' ? lunchPool : dinnerPool;
       const randomIndex = Math.floor(Math.random() * (pool.length || 1));
@@ -261,14 +261,22 @@ Return JSON with this exact shape:
         ingredients: ['6 oz Grilled Chicken Breast', '1 cup Cooked Quinoa', '1 cup Mixed Greens'],
       };
 
+      const swapOccurrences = effectiveBulkPrep
+        ? Math.max(Number(swapTarget.occurrences) || 1, 1)
+        : 1;
+
+      const swapMultiplier = effectiveBulkPrep
+        ? swapOccurrences * totalPortionWeight
+        : totalPortionWeight;
+
       const swappedMeal = createScaledMeal(
         baseMeal,
         swapTarget.targetCalories || 700,
         swapTarget.targetProtein || 50,
         swapTarget.type,
-        totalPortionWeight,
+        swapMultiplier,
         effectiveBulkPrep,
-        1
+        swapOccurrences
       );
 
       return NextResponse.json({ swappedMeal });
@@ -491,7 +499,9 @@ Return JSON with this exact shape:
         lower.includes('noodle') ||
         lower.includes('bread') ||
         lower.includes('potato') ||
-        lower.includes('oats')
+        lower.includes('oats') ||
+        lower.includes('farro') ||
+        lower.includes('couscous')
       ) {
         return 'Grains & Carbs';
       }

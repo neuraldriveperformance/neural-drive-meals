@@ -14,9 +14,13 @@ const DENSITY_CONVERSIONS: Record<string, number> = {
   rice_cup: 185,
   oats_cup: 90,
   quinoa_cup: 170,
+  farro_cup: 170,
+  couscous_cup: 175,
+  bulgur_cup: 140,
   flour_cup: 120,
   pasta_cup: 100,
   barley_cup: 200,
+  lentils_cup: 190,
   water_cup: 240,
   milk_cup: 245,
   oil_tbsp: 14,
@@ -24,16 +28,16 @@ const DENSITY_CONVERSIONS: Record<string, number> = {
 
 // Expansion ratios (Cooked Volume -> Dry Uncooked Volume)
 const COOKED_TO_DRY_RATIO: Record<string, number> = {
-  quinoa: 3.0,   // 1 cup dry quinoa yields ~3 cups cooked
-  rice: 2.5,     // 1 cup dry rice yields ~2.5 cups cooked
+  quinoa: 3.0,
+  rice: 2.5,
   barley: 2.5,
   farro: 2.5,
   couscous: 2.5,
   bulgur: 2.5,
   lentils: 2.5,
-  oats: 2.0,     // 1 cup dry oats yields ~2 cups cooked
+  oats: 2.0,
   oatmeal: 2.0,
-  pasta: 2.0,    // 1 cup dry pasta yields ~2 cups cooked
+  pasta: 2.0,
   spaghetti: 2.0,
   penne: 2.0,
   macaroni: 2.0,
@@ -43,6 +47,19 @@ const GRAIN_REGEX = /\b(rice|oats|oatmeal|quinoa|pasta|spaghetti|penne|macaroni|
 
 export function isGrainItem(name: string): boolean {
   return GRAIN_REGEX.test(name.toLowerCase());
+}
+
+/**
+ * Strips any pre-formatted dual-unit prefix (e.g., "2.8 cups / 476 g Cooked Farro" -> "2.8 cups Cooked Farro")
+ * so downstream parsers never accidentally include "/ 476 g" in the ingredient name.
+ */
+export function stripDualUnitString(rawText: string): string {
+  return rawText
+    .replace(
+      /^([\d\.\/]+\s*(?:lbs?\s*\(\d+\s*oz\)|oz|lbs?|cups?(?:\s*\(uncooked\))?|tbsp|tsp|can\s*\(\d+\s*oz\)|medium|[A-Za-z]+)?)\s*\/\s*(?:approx\.\s*)?[\d\.]+\s*(?:g|kg|ml|L)\s+/i,
+      '$1 '
+    )
+    .trim();
 }
 
 /**
@@ -77,7 +94,7 @@ export function determineCategory(name: string): string {
   if (/\b(milk|cheese|cheddar|mozzarella|parmesan|feta|yogurt|greek yogurt|butter|ghee|cream|sour cream|cottage cheese|egg|eggs|egg whites)\b/.test(lower)) {
     return 'Dairy & Eggs';
   }
-  if (/\b(rice|oats|oatmeal|quinoa|bread|pasta|spaghetti|penne|tortilla|tortillas|barley|farro|couscous|grits|flour|cereal|bagel|bagels|pita|wrap|wraps)\b/.test(lower)) {
+  if (/\b(rice|oats|oatmeal|quinoa|bread|pasta|spaghetti|penne|tortilla|tortillas|barley|farro|couscous|bulgur|grits|flour|cereal|bagel|bagels|pita|wrap|wraps)\b/.test(lower)) {
     return 'Grains & Bakery';
   }
   return 'Pantry & Other';
@@ -85,6 +102,9 @@ export function determineCategory(name: string): string {
 
 export function normalizeIngredientName(rawName: string): string {
   let name = rawName.toLowerCase();
+
+  // Remove any stray metric slash prefixes if present
+  name = name.replace(/^\/\s*(?:approx\.\s*)?[\d\.]+\s*(?:g|kg|ml|l)\s+/i, '');
 
   // Strip parenthetical notes like "(uncooked)", "(cooked)", "(boneless, skinless)"
   name = name.replace(/\([^)]*\)/g, '');
@@ -132,11 +152,6 @@ function parseQuantity(rawQty: string): number {
   return total || 1;
 }
 
-/**
- * Standardizes an ingredient into Imperial / Metric dual format.
- * - mode = 'recipe': Preserves recipe-level ingredient names and cooked/uncooked volumes while enforcing dual units.
- * - mode = 'grocery': Converts cooked grain volumes to dry uncooked equivalents and normalizes prep modifiers.
- */
 export function standardizeIngredient(
   rawInput: string | any,
   mode: 'recipe' | 'grocery' = 'recipe'
@@ -145,47 +160,14 @@ export function standardizeIngredient(
   let explicitAmount = '';
 
   if (typeof rawInput === 'string') {
-    rawStr = rawInput.trim();
+    rawStr = stripDualUnitString(rawInput.trim());
   } else if (rawInput && typeof rawInput === 'object') {
     rawStr = (rawInput.item || rawInput.name || '').trim();
-    explicitAmount = (rawInput.amount || rawInput.quantity || '').toString().trim();
-  }
-
-  // If explicitAmount is already formatted as dual-unit ("Imperial / Metric"), preserve it cleanly
-  if (explicitAmount.includes('/')) {
-    const [primaryPart, metricPart] = explicitAmount.split('/').map((s) => s.trim());
-    const normalizedName = normalizeIngredientName(rawStr);
-    return {
-      originalName: rawStr,
-      normalizedName,
-      category: determineCategory(normalizedName),
-      primaryAmount: primaryPart,
-      metricAmount: metricPart,
-      dualDisplay: `${primaryPart} / ${metricPart}`,
-    };
-  }
-
-  // Handle string inputs that already contain a dual-unit prefix (e.g. "6 oz / 170 g Grilled Chicken Breast")
-  const dualPrefixMatch = rawStr.match(
-    /^([\d\.]+(?:\s+lbs?\s*\(\d+\s*oz\)|\s*(?:oz|lbs?|cups?(?:\s*\(uncooked\))?|tbsp|tsp|can\s*\(\d+\s*oz\)|medium|[A-Za-z]+))\s*\/\s*(?:approx\.\s*)?[\d\.]+\s*(?:g|kg|ml|L))\s+(.*)$/i
-  );
-  if (dualPrefixMatch) {
-    const dualStr = dualPrefixMatch[1].trim();
-    const itemOnly = dualPrefixMatch[2].trim();
-    const [primaryPart, metricPart] = dualStr.split('/').map((s) => s.trim());
-    const normalizedName = normalizeIngredientName(itemOnly);
-    return {
-      originalName: itemOnly,
-      normalizedName,
-      category: determineCategory(normalizedName),
-      primaryAmount: primaryPart,
-      metricAmount: metricPart,
-      dualDisplay: dualStr,
-    };
+    const rawAmt = (rawInput.amount || rawInput.quantity || '').toString().trim();
+    explicitAmount = rawAmt.includes('/') ? rawAmt.split('/')[0].trim() : rawAmt;
   }
 
   const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
-  // Matches attached or spaced units (e.g. "170g Chicken Breast" or "6 oz Chicken Breast")
   const match = fullText.match(/^([\d\.\/\s]+)?\s*([A-Za-z]+)?\s+(.*)$/);
 
   let qty = 1;
@@ -240,12 +222,16 @@ export function standardizeIngredient(
     else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') cups = qty / 8;
     else if (unit === 'g' || unit === 'gram' || unit === 'grams') cups = qty / 170;
 
-    let density = 160;
+    let density = 170;
     if (lowerName.includes('rice')) density = DENSITY_CONVERSIONS.rice_cup;
     else if (lowerName.includes('oat')) density = DENSITY_CONVERSIONS.oats_cup;
     else if (lowerName.includes('quinoa')) density = DENSITY_CONVERSIONS.quinoa_cup;
+    else if (lowerName.includes('farro')) density = DENSITY_CONVERSIONS.farro_cup;
+    else if (lowerName.includes('couscous')) density = DENSITY_CONVERSIONS.couscous_cup;
+    else if (lowerName.includes('bulgur')) density = DENSITY_CONVERSIONS.bulgur_cup;
     else if (lowerName.includes('pasta')) density = DENSITY_CONVERSIONS.pasta_cup;
     else if (lowerName.includes('barley')) density = DENSITY_CONVERSIONS.barley_cup;
+    else if (lowerName.includes('lentil')) density = DENSITY_CONVERSIONS.lentils_cup;
 
     baseGrams = unit === 'g' || unit === 'grams' ? Math.round(qty) : Math.round(cups * density);
     const roundedCups = parseFloat(cups.toFixed(2));
@@ -289,7 +275,7 @@ export function standardizeIngredient(
     metricAmount = totalMl >= 1000 ? `${(totalMl / 1000).toFixed(2)} L` : `${totalMl} ml`;
   }
 
-  // --- RULE 5: PURE WEIGHTS FOR PRODUCE/DAIRY/PANTRY (e.g. "150g Greek Yogurt" or "200g Spinach") ---
+  // --- RULE 5: PURE WEIGHTS FOR PRODUCE/DAIRY/PANTRY ---
   else if (unit === 'g' || unit === 'gram' || unit === 'grams') {
     baseGrams = Math.round(qty);
     const oz = parseFloat((qty / 28.3495).toFixed(1));
