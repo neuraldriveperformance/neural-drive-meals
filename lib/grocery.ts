@@ -1,6 +1,10 @@
 // lib/grocery.ts
 import { createBrowserClient } from '@supabase/ssr';
-import { standardizeIngredient } from '@/lib/units';
+import {
+  standardizeIngredient,
+  normalizeIngredientName,
+  determineCategory,
+} from '@/lib/units';
 
 export interface GroceryItem {
   id: string;
@@ -26,70 +30,40 @@ const getSupabase = () =>
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-// --- HELPER FUNCTIONS FOR CLEANING & COMBINING INGREDIENTS ---
-
-function normalizeItemName(rawName: string): string {
-  let name = rawName.toLowerCase();
-
-  // Strip common modifiers (comma separated or standalone words)
-  name = name.replace(/,\s*(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry|uncooked)/g, '');
-  name = name.replace(/\b(cooked|drained|rinsed|raw|chopped|diced|minced|fresh|frozen|dry|uncooked)\b/g, '');
-  name = name.replace(/\s+/g, ' ').trim();
-
-  // Return formatted Title Case
-  return name.replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function determineCategory(name: string, fallbackCategory = 'Pantry & Other'): string {
-  if (fallbackCategory !== 'Pantry & Other') return fallbackCategory;
-
-  const lower = name.toLowerCase();
-  if (/\b(chicken|beef|steak|turkey|salmon|shrimp|pork|fish|egg|eggs|tofu|tempeh)\b/.test(lower)) {
-    return 'Meat & Seafood';
-  }
-  if (/\b(spinach|kale|onion|garlic|pepper|peppers|broccoli|tomato|lemon|lime|avocado|berry|berries|apple|cilantro)\b/.test(lower)) {
-    return 'Produce';
-  }
-  if (/\b(milk|cheese|yogurt|butter|cream)\b/.test(lower)) {
-    return 'Dairy & Eggs';
-  }
-  if (/\b(rice|oats|quinoa|bread|pasta|tortilla|tortillas|barley|grits)\b/.test(lower)) {
-    return 'Grains & Bakery';
-  }
-  return 'Pantry & Other';
-}
-
 /**
- * Cross-recipe ingredient aggregation & bulk-prep scaling parser
+ * Cross-recipe ingredient aggregation & strict bulk-prep deduplication parser
  */
 export function parseIngredientsToGroceryList(
   rawIngredients: any[],
   enableBulkPrep: boolean = false
 ): GroceryItem[] {
-  const map = new Map<string, { 
-    totalQuantity: number; 
-    unit: string; 
-    category: string; 
-    originalName: string;
-    seenCount: number;
-  }>();
+  const map = new Map<
+    string,
+    {
+      totalQuantity: number;
+      unit: string;
+      category: string;
+      originalName: string;
+      seenRecipes: Set<string>;
+    }
+  >();
 
   rawIngredients.forEach((ing) => {
     let rawStr = '';
     let explicitAmount = '';
-    let categoryInput = 'Pantry & Other';
+    let recipeName = '';
 
     if (typeof ing === 'string') {
       rawStr = ing.trim();
     } else if (ing && typeof ing === 'object') {
       rawStr = (ing.item || ing.name || '').trim();
       explicitAmount = ing.amount || ing.quantity || '';
-      if (ing.category) categoryInput = ing.category;
+      recipeName = (ing.recipeName || ing.mealName || '').trim().toLowerCase();
     }
 
     if (!rawStr || rawStr.includes('Self-provided')) return;
 
-    // COMBINE QUANTITY & NAME
+    // Combine quantity & name
     const fullText = explicitAmount ? `${explicitAmount} ${rawStr}` : rawStr;
     const match = fullText.match(/^([\d\.\/]+)\s*([A-Za-z]+)?\s+(.*)$/);
 
@@ -110,8 +84,10 @@ export function parseIngredientsToGroceryList(
       }
     }
 
-    const normalized = normalizeItemName(rawItemName);
-    const category = determineCategory(normalized, categoryInput);
+    // Normalizes prep words ("Grilled Chicken Breast" -> "Chicken Breast")
+    // while keeping grains labeled ("Brown Rice (Uncooked)")
+    const normalized = normalizeIngredientName(rawItemName);
+    const category = determineCategory(normalized);
     const key = normalized;
 
     if (!map.has(key)) {
@@ -120,16 +96,22 @@ export function parseIngredientsToGroceryList(
         unit: rawUnit,
         category,
         originalName: normalized,
-        seenCount: 0,
+        seenRecipes: new Set<string>(),
       });
     }
 
     const entry = map.get(key)!;
-    entry.seenCount += 1;
 
-    // BULK PREP FIX: Caps repeated batch ingredient multiplications
-    if (enableBulkPrep && entry.seenCount > 2) {
-      entry.totalQuantity += qty * 0.25;
+    // STRICT BULK-PREP FLAT-CAPPING:
+    // If bulk prep is ON and this exact recipe was already counted for this ingredient,
+    // skip adding it again so 3 days of a batch meal = 1x batch quantity instead of 3x.
+    if (enableBulkPrep) {
+      const recipeKey = recipeName || `anon-${normalized}`;
+      if (entry.seenRecipes.has(recipeKey)) {
+        return;
+      }
+      entry.seenRecipes.add(recipeKey);
+      entry.totalQuantity += qty;
     } else {
       entry.totalQuantity += qty;
     }
@@ -146,7 +128,6 @@ export function parseIngredientsToGroceryList(
       ? `${roundedQty} ${val.unit} ${val.originalName}`
       : `${roundedQty} ${val.originalName}`;
 
-    // Standardize total quantity & unit into Imperial + Metric dual format
     const standardized = standardizeIngredient(rawCombinedString);
 
     items.push({
@@ -170,7 +151,9 @@ export async function saveGroceryChecklist(
 ): Promise<boolean> {
   const supabase = getSupabase();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return false;
 
     const formattedItems = items.map((item) => ({
@@ -203,10 +186,15 @@ export async function saveGroceryChecklist(
   }
 }
 
-export async function updateGroceryChecklistItems(planId: string, items: GroceryItem[]): Promise<boolean> {
+export async function updateGroceryChecklistItems(
+  planId: string,
+  items: GroceryItem[]
+): Promise<boolean> {
   const supabase = getSupabase();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return false;
 
     const formattedItems = items.map((item) => ({
@@ -237,10 +225,15 @@ export async function updateGroceryChecklistItems(planId: string, items: Grocery
   }
 }
 
-export async function updateChecklistTitle(planId: string, newTitle: string): Promise<boolean> {
+export async function updateChecklistTitle(
+  planId: string,
+  newTitle: string
+): Promise<boolean> {
   const supabase = getSupabase();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return false;
 
     const { error } = await supabase
@@ -256,10 +249,14 @@ export async function updateChecklistTitle(planId: string, newTitle: string): Pr
   }
 }
 
-export async function getGroceryChecklist(planId: string): Promise<GroceryChecklistData | null> {
+export async function getGroceryChecklist(
+  planId: string
+): Promise<GroceryChecklistData | null> {
   const supabase = getSupabase();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data, error } = await supabase
@@ -288,7 +285,9 @@ export async function getGroceryChecklist(planId: string): Promise<GroceryCheckl
 export async function getAllUserChecklists(): Promise<GroceryChecklistData[]> {
   const supabase = getSupabase();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return [];
 
     const { data, error } = await supabase
@@ -314,7 +313,9 @@ export async function getAllUserChecklists(): Promise<GroceryChecklistData[]> {
 export async function deleteGroceryChecklist(planId: string): Promise<boolean> {
   const supabase = getSupabase();
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return false;
 
     const { error } = await supabase

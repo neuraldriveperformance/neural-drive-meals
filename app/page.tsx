@@ -82,6 +82,20 @@ export default function Home() {
     (household.adults * 1.0 + household.teens * 0.8 + household.children * 0.5).toFixed(1)
   );
 
+  // Tags each ingredient with its parent recipe name so bulk-prep deduplication
+  // counts each batch recipe once instead of multiplying across repeated days
+  const extractTaggedIngredients = (calendar: any[]) => {
+    return calendar.flatMap((day: any) =>
+      day.meals?.flatMap((meal: any) =>
+        (meal.ingredients || []).map((ing: any) =>
+          typeof ing === 'string'
+            ? { item: ing, recipeName: meal.name || '' }
+            : { ...ing, recipeName: meal.name || '' }
+        )
+      ) || []
+    );
+  };
+
   useEffect(() => {
     try {
       const savedHistory = localStorage.getItem('ndp_recipe_history');
@@ -224,10 +238,8 @@ export default function Home() {
       setActivePlanId(targetPlanId);
 
       const activeBulkPrep = variety === 5 ? false : bulkPrep;
-      const rawIngredients = weeklyCalendar.flatMap((day) =>
-        day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
-      );
-      const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients, activeBulkPrep);
+      const taggedIngredients = extractTaggedIngredients(weeklyCalendar);
+      const parsedGroceryItems = parseIngredientsToGroceryList(taggedIngredients, activeBulkPrep);
       const checklistTitle = clientName
         ? `${clientName}'s Grocery List (${creationDateStr})`
         : `Grocery List (${creationDateStr})`;
@@ -318,10 +330,8 @@ export default function Home() {
           const targetPlanId = insertedPlan.id;
           setActivePlanId(targetPlanId);
 
-          const rawIngredients = generatedCalendar.flatMap((day: any) =>
-            day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
-          );
-          const parsedGroceryItems = parseIngredientsToGroceryList(rawIngredients, activeBulkPrep);
+          const taggedIngredients = extractTaggedIngredients(generatedCalendar);
+          const parsedGroceryItems = parseIngredientsToGroceryList(taggedIngredients, activeBulkPrep);
           const checklistTitle = clientName
             ? `${clientName}'s Grocery List (${creationDateStr})`
             : `Grocery List (${creationDateStr})`;
@@ -929,9 +939,7 @@ export default function Home() {
             <GroceryChecklist
               planId={activePlanId}
               planTitle={clientName ? `${clientName}'s Grocery List` : 'Weekly Grocery List'}
-              rawIngredients={weeklyCalendar.flatMap((day) =>
-                day.meals?.flatMap((meal: any) => meal.ingredients || []) || []
-              )}
+              rawIngredients={extractTaggedIngredients(weeklyCalendar)}
             />
           </div>
         )}
