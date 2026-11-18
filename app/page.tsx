@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import MealPlanCalendar from './Components/MealPlanCalendar';
 import GroceryChecklist from './Components/GroceryChecklist';
+import HeroShowcase from './Components/HeroShowcase';
 import { createClient } from '@/lib/supabaseClient';
 import { getUserProfile } from '@/lib/profile';
 import { parseIngredientsToGroceryList, saveGroceryChecklist } from '@/lib/grocery';
@@ -566,7 +567,10 @@ export default function Home() {
           </nav>
         </header>
 
-        <div className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
+        {/* PHASE 1: KINETIC VIDEO HERO & VISUAL HOW IT WORKS SECTION */}
+        <HeroShowcase />
+
+        <div id="generator-controls" className="bg-[#0F1724] border border-[#1E2D4A] rounded-2xl p-6 space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* COLUMN 1: CLIENT NUTRITION LAYER */}
             <div className="bg-[#162032] border border-[#1E2D4A] rounded-xl p-5 space-y-4">
