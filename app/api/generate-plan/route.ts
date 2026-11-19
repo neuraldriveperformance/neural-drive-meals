@@ -148,6 +148,7 @@ export async function POST(req: Request) {
       return {
         ...baseMeal,
         type,
+        imageSearchQuery: baseMeal.imageSearchQuery || baseMeal.name,
         calories: Math.round(cals),
         protein: Math.round(prot),
         carbs: Math.max(targetCarbs, 0),
@@ -185,6 +186,9 @@ MEASUREMENT & UNIT DIRECTIVES:
 - Always explicitly state "Cooked" for prepared grains in recipes (e.g., "1 cup Cooked Brown Rice", "1 cup Cooked Quinoa", "1 cup Cooked Farro") unless the recipe literally uses raw oats/grains.
 - Do NOT write "170g Chicken Breast" — write "6 oz Chicken Breast" so our dual-unit converter formats it cleanly into Imperial / Metric.
 
+PHOTOGRAPHY QUERY DIRECTIVE:
+- For every recipe, include "imageSearchQuery": a concise, 2-to-4 word visual food photography search phrase describing the plated dish (e.g., "grilled chicken quinoa bowl", "seared salmon asparagus", "steak sweet potato"). Avoid brand names or cooking jargon in imageSearchQuery.
+
 CREATIVE DIVERSITY INSTRUCTIONS:
 - Draw from an expansive global library of recipes and cuisines (e.g., Mediterranean, Asian, Latin, Middle Eastern, American, European).
 - Avoid defaulting to standard generic meal-prep staples (like plain chicken and rice) unless explicitly requested.
@@ -211,6 +215,7 @@ Return JSON with this exact shape:
   "lunchPool": [
     {
       "name": "Creative Dish Name",
+      "imageSearchQuery": "grilled chicken quinoa bowl",
       "calories": 600,
       "protein": 45,
       "carbs": 50,
@@ -223,6 +228,7 @@ Return JSON with this exact shape:
   "dinnerPool": [
     {
       "name": "Creative Dish Name",
+      "imageSearchQuery": "grilled salmon broccoli",
       "calories": 700,
       "protein": 50,
       "carbs": 60,
@@ -257,6 +263,7 @@ Return JSON with this exact shape:
       const randomIndex = Math.floor(Math.random() * (pool.length || 1));
       const baseMeal = pool[randomIndex] || {
         name: 'Custom Macro Bowl',
+        imageSearchQuery: 'grilled chicken quinoa salad',
         calories: swapTarget.targetCalories || 650,
         protein: swapTarget.targetProtein || 45,
         ingredients: ['6 oz Grilled Chicken Breast', '1 cup Cooked Quinoa', '1 cup Mixed Greens'],
@@ -379,6 +386,7 @@ Return JSON with this exact shape:
         return {
           type,
           name: mealData.name || mealData.title || `Self-Provided ${type}`,
+          imageSearchQuery: mealData.imageSearchQuery || mealData.name || `healthy ${type.toLowerCase()}`,
           calories: cal,
           protein: prot,
           carbs: carbs,
@@ -423,6 +431,7 @@ Return JSON with this exact shape:
         } else {
           baseMeal = {
             name: isVegan ? 'Berry & Chia Oat Bowl' : 'Egg White & Avocado Wrap',
+            imageSearchQuery: isVegan ? 'berry oatmeal bowl' : 'avocado egg wrap',
             calories: 400,
             protein: 30,
             carbs: 45,

@@ -3,10 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { getSavedRecipes, saveRecipe, unsaveRecipe } from '@/lib/recipes';
 import { standardizeIngredient } from '@/lib/units';
+import MealPhoto from './MealPhoto';
 
 export interface Meal {
   type: string;
   name: string;
+  imageSearchQuery?: string;
   calories: number;
   protein: number;
   carbs: number;
@@ -229,148 +231,159 @@ ${(meal.instructions || []).map((inst, idx) => `${idx + 1}. ${inst}`).join('\n')
                     <div
                       key={mIdx}
                       onClick={() => onSelectMeal && onSelectMeal(meal)}
-                      className="bg-[#162032] border border-[#1E2D4A] hover:border-[#00F2FE]/60 rounded-xl p-2.5 space-y-2 text-xs transition cursor-pointer"
+                      className="group bg-[#162032] border border-[#1E2D4A] hover:border-[#00F2FE]/60 rounded-xl overflow-hidden text-xs transition cursor-pointer"
                     >
-                      {/* CARD HEADER */}
-                      <div className="flex justify-between items-center gap-1">
-                        <span
-                          className={`font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A] ${
-                            isModal ? 'whitespace-normal' : 'truncate'
+                      {/* DYNAMIC DISH PHOTOGRAPH */}
+                      <div className="print:hidden">
+                        <MealPhoto
+                          query={meal.imageSearchQuery}
+                          mealName={meal.name}
+                          mealType={meal.type}
+                        />
+                      </div>
+
+                      <div className="p-2.5 space-y-2">
+                        {/* CARD HEADER */}
+                        <div className="flex justify-between items-center gap-1">
+                          <span
+                            className={`font-extrabold text-[#00F2FE] text-[9px] uppercase bg-[#0F1724] px-1.5 py-0.5 rounded border border-[#1E2D4A] ${
+                              isModal ? 'whitespace-normal' : 'truncate'
+                            }`}
+                          >
+                            {meal.type}
+                          </span>
+
+                          {meal.isBatchCooked ? (
+                            <span className="bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30 text-[8px] px-1 py-0.5 rounded font-bold flex-shrink-0">
+                              🍱 Batch
+                            </span>
+                          ) : meal.prepTime ? (
+                            <span className="text-[9px] text-gray-400 font-mono flex-shrink-0">
+                              ⏱️ {meal.prepTime}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* UNCOMPRESSED MEAL TITLE */}
+                        <div
+                          className={`font-bold text-white text-xs leading-snug ${
+                            isModal
+                              ? 'whitespace-normal break-words py-0.5'
+                              : 'line-clamp-2'
                           }`}
                         >
-                          {meal.type}
-                        </span>
+                          {meal.name}
+                        </div>
 
-                        {meal.isBatchCooked ? (
-                          <span className="bg-[#00F2FE]/10 text-[#00F2FE] border border-[#00F2FE]/30 text-[8px] px-1 py-0.5 rounded font-bold flex-shrink-0">
-                            🍱 Batch
+                        {/* FULL MACROS */}
+                        <div className="grid grid-cols-4 gap-0.5 text-[9px] font-mono pt-0.5 text-center">
+                          <span className="bg-[#0F1724] py-0.5 rounded text-amber-400 font-bold border border-[#1E2D4A] truncate">
+                            {meal.calories}k
                           </span>
-                        ) : meal.prepTime ? (
-                          <span className="text-[9px] text-gray-400 font-mono flex-shrink-0">
-                            ⏱️ {meal.prepTime}
+                          <span className="bg-[#0F1724] py-0.5 rounded text-emerald-400 font-bold border border-[#1E2D4A] truncate">
+                            {meal.protein}g
                           </span>
-                        ) : null}
-                      </div>
+                          <span className="bg-[#0F1724] py-0.5 rounded text-cyan-400 border border-[#1E2D4A] truncate">
+                            {meal.carbs ?? 0}g
+                          </span>
+                          <span className="bg-[#0F1724] py-0.5 rounded text-rose-400 border border-[#1E2D4A] truncate">
+                            {meal.fat ?? 0}g
+                          </span>
+                        </div>
 
-                      {/* UNCOMPRESSED MEAL TITLE */}
-                      <div
-                        className={`font-bold text-white text-xs leading-snug ${
-                          isModal
-                            ? 'whitespace-normal break-words py-0.5'
-                            : 'line-clamp-2'
-                        }`}
-                      >
-                        {meal.name}
-                      </div>
-
-                      {/* FULL MACROS */}
-                      <div className="grid grid-cols-4 gap-0.5 text-[9px] font-mono pt-0.5 text-center">
-                        <span className="bg-[#0F1724] py-0.5 rounded text-amber-400 font-bold border border-[#1E2D4A] truncate">
-                          {meal.calories}k
-                        </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-emerald-400 font-bold border border-[#1E2D4A] truncate">
-                          {meal.protein}g
-                        </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-cyan-400 border border-[#1E2D4A] truncate">
-                          {meal.carbs ?? 0}g
-                        </span>
-                        <span className="bg-[#0F1724] py-0.5 rounded text-rose-400 border border-[#1E2D4A] truncate">
-                          {meal.fat ?? 0}g
-                        </span>
-                      </div>
-
-                      {/* TOGGLE RECIPE DROPDOWN */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleExpand(mealId);
-                        }}
-                        className="w-full mt-1 text-[9px] font-extrabold uppercase bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] py-1 rounded border border-[#1E2D4A] transition"
-                      >
-                        {isExpanded ? 'Hide ▲' : 'Recipe ▼'}
-                      </button>
-
-                      {/* RECIPE DETAILS & ACTION BUTTON MATRIX */}
-                      {isExpanded && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]"
+                        {/* TOGGLE RECIPE DROPDOWN */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(mealId);
+                          }}
+                          className="w-full mt-1 text-[9px] font-extrabold uppercase bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] py-1 rounded border border-[#1E2D4A] transition"
                         >
-                          {meal.batchYield && (
-                            <div className="bg-[#0F1724] p-1.5 rounded border border-[#1E2D4A] text-[9px]">
-                              <span className="text-gray-400 uppercase font-bold block">Yield / Portioning:</span>
-                              <span className="text-[#00F2FE] font-medium">{meal.batchYield}</span>
+                          {isExpanded ? 'Hide ▲' : 'Recipe ▼'}
+                        </button>
+
+                        {/* RECIPE DETAILS & ACTION BUTTON MATRIX */}
+                        {isExpanded && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="pt-2 border-t border-[#1E2D4A] space-y-2 text-gray-300 text-[10px]"
+                          >
+                            {meal.batchYield && (
+                              <div className="bg-[#0F1724] p-1.5 rounded border border-[#1E2D4A] text-[9px]">
+                                <span className="text-gray-400 uppercase font-bold block">Yield / Portioning:</span>
+                                <span className="text-[#00F2FE] font-medium">{meal.batchYield}</span>
+                              </div>
+                            )}
+
+                            <div>
+                              <strong className="text-[#00F2FE] block mb-0.5">
+                                Ingredients:
+                              </strong>
+                              <ul className="list-disc pl-3 space-y-0.5">
+                                {meal.ingredients?.map((ing: string | any, iIdx: number) => (
+                                  <li key={iIdx} className="whitespace-normal break-words">
+                                    {formatRecipeIngredientLine(ing)}
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
-                          )}
 
-                          <div>
-                            <strong className="text-[#00F2FE] block mb-0.5">
-                              Ingredients:
-                            </strong>
-                            <ul className="list-disc pl-3 space-y-0.5">
-                              {meal.ingredients?.map((ing: string | any, iIdx: number) => (
-                                <li key={iIdx} className="whitespace-normal break-words">
-                                  {formatRecipeIngredientLine(ing)}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                            <div>
+                              <strong className="text-[#00F2FE] block mb-0.5">
+                                {meal.isBatchCooked ? 'Batch Cooking & Storage:' : 'Instructions:'}
+                              </strong>
+                              <ol className="list-decimal pl-3 space-y-0.5">
+                                {meal.instructions?.map((inst: string, iIdx: number) => (
+                                  <li key={iIdx} className="whitespace-normal break-words">{inst}</li>
+                                ))}
+                              </ol>
+                            </div>
 
-                          <div>
-                            <strong className="text-[#00F2FE] block mb-0.5">
-                              {meal.isBatchCooked ? 'Batch Cooking & Storage:' : 'Instructions:'}
-                            </strong>
-                            <ol className="list-decimal pl-3 space-y-0.5">
-                              {meal.instructions?.map((inst: string, iIdx: number) => (
-                                <li key={iIdx} className="whitespace-normal break-words">{inst}</li>
-                              ))}
-                            </ol>
-                          </div>
-
-                          {/* ACTION BUTTON MATRIX */}
-                          <div className="grid grid-cols-4 gap-1 pt-2 border-t border-[#1E2D4A]/50">
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleBookmark(e, meal)}
-                              disabled={isSaving}
-                              className={`py-1 rounded text-[8px] font-bold uppercase transition text-center border ${
-                                isBookmarked
-                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                                  : 'bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border-[#1E2D4A]'
-                              }`}
-                            >
-                              {isSaving ? '⏳...' : isBookmarked ? '🔖 Saved' : '🔖 Save'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handlePrintRecipe(meal)}
-                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center"
-                            >
-                              🖨️ Print
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleShareRecipe(meal)}
-                              className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center"
-                            >
-                              📤 Share
-                            </button>
-                            {onSwapMeal && (
+                            {/* ACTION BUTTON MATRIX */}
+                            <div className="grid grid-cols-4 gap-1 pt-2 border-t border-[#1E2D4A]/50">
                               <button
                                 type="button"
-                                onClick={() => handleSwapClick(dayPlan.day, meal.type, mealId)}
-                                disabled={isSwapping}
-                                className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-cyan-400 border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center ${
-                                  isSwapping ? 'opacity-50 cursor-not-allowed' : ''
+                                onClick={(e) => handleToggleBookmark(e, meal)}
+                                disabled={isSaving}
+                                className={`py-1 rounded text-[8px] font-bold uppercase transition text-center border ${
+                                  isBookmarked
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                    : 'bg-[#0F1724] hover:bg-[#1E2D4A] text-amber-400 border-[#1E2D4A]'
                                 }`}
                               >
-                                {isSwapping ? '⏳...' : '🔄 Swap'}
+                                {isSaving ? '⏳...' : isBookmarked ? '🔖 Saved' : '🔖 Save'}
                               </button>
-                            )}
+                              <button
+                                type="button"
+                                onClick={() => handlePrintRecipe(meal)}
+                                className="bg-[#0F1724] hover:bg-[#1E2D4A] text-gray-200 border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center"
+                              >
+                                🖨️ Print
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleShareRecipe(meal)}
+                                className="bg-[#0F1724] hover:bg-[#1E2D4A] text-[#00F2FE] border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center"
+                              >
+                                📤 Share
+                              </button>
+                              {onSwapMeal && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwapClick(dayPlan.day, meal.type, mealId)}
+                                  disabled={isSwapping}
+                                  className={`bg-[#0F1724] hover:bg-[#1E2D4A] text-cyan-400 border border-[#1E2D4A] py-1 rounded text-[8px] font-bold uppercase transition text-center ${
+                                    isSwapping ? 'opacity-50 cursor-not-allowed' : ''
+                                  }`}
+                                >
+                                  {isSwapping ? '⏳...' : '🔄 Swap'}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   );
                 })
